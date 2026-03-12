@@ -1,0 +1,70 @@
+export enum SigningStep {
+  Upload = 0,
+  Wallet = 1,
+  Credential = 2,
+  Signature = 3,
+  Placement = 4,
+  Review = 5,
+  Anchoring = 6,
+  Complete = 7,
+}
+
+export interface SignaturePosition {
+  x: number;      // 0-1 relative, origin top-left
+  y: number;      // 0-1 relative, origin top-left
+  page: number;   // 0-based page index
+  width: number;  // 0-1 relative to page width
+  height: number; // 0-1 relative to page height
+}
+
+export type SignatureType = 'auto' | 'drawn';
+
+export interface SigningSession {
+  // Step 1
+  pdfFile: File | null;
+  pdfPageCount: number;
+
+  // Step 2
+  walletAddress: string;
+  publicKey: string;
+  connectionMethod: 'extension' | 'mobile' | '';
+
+  // Step 3
+  signerName: string;
+  signerDID: string;
+  credentialID: string;
+
+  // Step 4
+  signatureType: SignatureType | '';
+  signatureImage: string; // base64 data URL
+
+  // Step 5
+  signaturePosition: SignaturePosition | null;
+
+  // Step 7 (generated during anchoring)
+  documentHash: string;
+  digitalSignature: string;
+  txHash: string;
+
+  // Meta
+  currentStep: SigningStep;
+  timestamp: string;
+}
+
+// Fields safe to persist to sessionStorage (File objects excluded)
+export interface SerializableSession {
+  walletAddress: string;
+  publicKey: string;
+  connectionMethod: string;
+  signerName: string;
+  signerDID: string;
+  credentialID: string;
+  signatureType: string;
+  signatureImage: string;
+  signaturePosition: SignaturePosition | null;
+  currentStep: number;
+  documentHash: string;
+  digitalSignature: string;
+  txHash: string;
+  timestamp: string;
+}
