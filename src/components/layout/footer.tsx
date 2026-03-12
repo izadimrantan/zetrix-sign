@@ -7,6 +7,8 @@ export function Footer() {
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4" />
           <span>Powered by Zetrix Blockchain</span>
+          <span className="text-muted-foreground/60">·</span>
+          <span>Protected by Cloudflare</span>
         </div>
         <p>&copy; {new Date().getFullYear()} Zetrix Sign. All rights reserved.</p>
       </div>
