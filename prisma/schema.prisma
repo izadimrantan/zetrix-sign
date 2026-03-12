@@ -1,0 +1,24 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model SigningSession {
+  id               String    @id @default(cuid())
+  documentName     String
+  walletAddress    String
+  signerName       String
+  signerDID        String
+  credentialID     String
+  signatureType    String    // "auto" | "drawn"
+  documentHash     String    @unique
+  digitalSignature String
+  signerPublicKey  String
+  txHash           String
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+}
