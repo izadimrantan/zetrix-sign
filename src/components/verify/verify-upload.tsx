@@ -10,12 +10,13 @@ interface Props {
   isLoading: boolean;
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 export function VerifyUpload({ onHashComputed, isLoading }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   const handleFile = useCallback(async (file: File) => {
     setError('');
