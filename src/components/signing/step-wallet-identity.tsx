@@ -8,6 +8,7 @@ import { WalletConnector } from '@/components/wallet/wallet-connector';
 import { truncateAddress } from '@/lib/utils';
 import { getDummyCredential } from '@/lib/vc';
 import type { SigningSession } from '@/types/signing';
+import { trackIdentityConfirmed } from '@/lib/analytics';
 import type { WalletConnectResult } from '@/types/wallet';
 
 interface StepProps {
@@ -36,6 +37,7 @@ export function StepWalletIdentity({ session, updateSession, nextStep, prevStep 
       signerDID: vc.did,
       credentialID: vc.credentialID,
     });
+    trackIdentityConfirmed(vc.credentialID);
   };
 
   return (

@@ -6,6 +6,7 @@ import { VerifyUpload } from '@/components/verify/verify-upload';
 import { VerifyResult } from '@/components/verify/verify-result';
 import { validateDocument } from '@/lib/blockchain';
 import { Button } from '@/components/ui/button';
+import { trackVerifyStart, trackVerifyResult, trackVerifyError, trackVerifyAnother } from '@/lib/analytics';
 import type { ValidationResult } from '@/types/contract';
 
 function VerifyContent() {
@@ -16,15 +17,20 @@ function VerifyContent() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
 
-  const verifyHash = useCallback(async (hash: string) => {
+  const verifyHash = useCallback(async (hash: string, source: 'file_upload' | 'query_param' = 'file_upload') => {
     setIsLoading(true);
     setResult(null);
     setError('');
+    trackVerifyStart(source);
     try {
       const validationResult = await validateDocument(hash);
       setResult(validationResult);
+      const status = validationResult.isValid ? 'valid' : validationResult.reason?.includes('revoked') ? 'revoked' : validationResult.reason?.includes('No record') ? 'not_found' : 'invalid';
+      trackVerifyResult(status, hash);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed. Please try again.');
+      const msg = err instanceof Error ? err.message : 'Verification failed. Please try again.';
+      trackVerifyError(msg);
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -36,7 +42,7 @@ function VerifyContent() {
       setDocumentHash(hash);
       const fileParam = searchParams.get('file');
       setFileName(fileParam ? decodeURIComponent(fileParam) : '(hash provided via link)');
-      verifyHash(hash);
+      verifyHash(hash, 'query_param');
     }
   }, [searchParams, verifyHash]);
 
@@ -47,6 +53,7 @@ function VerifyContent() {
   };
 
   const handleReset = () => {
+    trackVerifyAnother();
     setResult(null);
     setDocumentHash('');
     setFileName('');

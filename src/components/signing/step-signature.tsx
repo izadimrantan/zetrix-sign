@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Eraser } from 'lucide-react';
+import { trackSignatureCreated, trackSignatureCleared, trackSignatureTabSwitch } from '@/lib/analytics';
 import type { SigningSession, SignatureType } from '@/types/signing';
 
 interface StepProps {
@@ -40,18 +41,21 @@ export function StepSignature({ session, updateSession, nextStep, prevStep }: St
   const handleAutoGenerate = useCallback(() => {
     const image = generateAutoSignature(session.signerName || 'Signer');
     updateSession({ signatureType: 'auto', signatureImage: image });
+    trackSignatureCreated('auto');
   }, [session.signerName, updateSession]);
 
   const handleDrawnSave = useCallback(() => {
     if (canvasRef.current && !canvasRef.current.isEmpty()) {
       const image = canvasRef.current.toDataURL('image/png');
       updateSession({ signatureType: 'drawn', signatureImage: image });
+      trackSignatureCreated('drawn');
     }
   }, [updateSession]);
 
   const handleClear = () => {
     canvasRef.current?.clear();
     updateSession({ signatureImage: '', signatureType: '' });
+    trackSignatureCleared();
   };
 
   const hasSignature = !!session.signatureImage;
@@ -62,7 +66,7 @@ export function StepSignature({ session, updateSession, nextStep, prevStep }: St
         <CardTitle>Create Signature</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SignatureType)}>
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as SignatureType); trackSignatureTabSwitch(v as 'auto' | 'draw'); }}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="auto">Auto Signature</TabsTrigger>
             <TabsTrigger value="drawn">Draw Signature</TabsTrigger>

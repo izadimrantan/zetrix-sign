@@ -5,6 +5,7 @@ import { Upload, FileText, X, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPdfPageCount } from '@/lib/pdf';
+import { trackFileUpload, trackFileRemove, trackFileUploadError } from '@/lib/analytics';
 import type { SigningSession } from '@/types/signing';
 
 interface StepProps {
@@ -27,18 +28,22 @@ export function StepUpload({ session, updateSession, nextStep }: StepProps) {
     setError('');
     if (file.type !== 'application/pdf') {
       setError('Please upload a PDF file.');
+      trackFileUploadError('invalid_type');
       return;
     }
     if (file.size > MAX_SIZE) {
       setError('PDF must be under 10MB.');
+      trackFileUploadError('file_too_large');
       return;
     }
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const pageCount = await getPdfPageCount(bytes);
       updateSession({ pdfFile: file, pdfPageCount: pageCount });
+      trackFileUpload(file.name, pageCount, Math.round(file.size / 1024 / 1024 * 100) / 100);
     } catch {
       setError('Failed to read PDF. Please try another file.');
+      trackFileUploadError('read_failed');
     }
   }, [updateSession]);
 
@@ -95,7 +100,7 @@ export function StepUpload({ session, updateSession, nextStep }: StepProps) {
             <Button
               variant="ghost"
               size="icon"
-              onClick={(e) => { e.stopPropagation(); updateSession({ pdfFile: null, pdfPageCount: 0 }); }}
+              onClick={(e) => { e.stopPropagation(); updateSession({ pdfFile: null, pdfPageCount: 0 }); trackFileRemove(); }}
             >
               <X className="h-4 w-4" />
             </Button>

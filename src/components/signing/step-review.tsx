@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { truncateAddress } from '@/lib/utils';
+import { trackReviewConfirmed } from '@/lib/analytics';
 import type { SigningSession } from '@/types/signing';
 
 interface StepProps {
@@ -54,7 +55,7 @@ export function StepReview({ session, nextStep, prevStep }: StepProps) {
 
         <div className="flex justify-between">
           <Button variant="outline" onClick={prevStep}>Back</Button>
-          <Button onClick={nextStep}>Sign & Anchor on Blockchain</Button>
+          <Button onClick={() => { trackReviewConfirmed(); nextStep(); }}>Sign & Anchor on Blockchain</Button>
         </div>
       </CardContent>
     </Card>

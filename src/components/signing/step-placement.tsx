@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PdfViewer } from '@/components/pdf/pdf-viewer';
 import { SignatureOverlay } from '@/components/pdf/signature-overlay';
 import { toast } from 'sonner';
+import { trackSignatureMoved } from '@/lib/analytics';
 import type { SigningSession, SignaturePosition } from '@/types/signing';
 
 interface StepProps {
@@ -27,6 +28,7 @@ export function StepPlacement({ session, updateSession, nextStep, prevStep }: St
 
   const handlePositionChange = (position: SignaturePosition) => {
     updateSession({ signaturePosition: position });
+    trackSignatureMoved();
   };
 
   return (

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { truncateAddress, formatTimestamp } from '@/lib/utils';
+import { trackExplorerLinkClick } from '@/lib/analytics';
 import type { ValidationResult } from '@/types/contract';
 
 interface Props {
@@ -118,6 +119,7 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    onClick={() => trackExplorerLinkClick(result.txHash!)}
                   >
                     View on Zetrix Explorer
                     <ExternalLink className="h-3 w-3" />

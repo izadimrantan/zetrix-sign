@@ -8,6 +8,7 @@ import { embedSignatureOnPdf } from '@/lib/pdf';
 import { computeSHA256 } from '@/lib/hash';
 import { signMessageExtension, signMessageMobile, sendTransactionMobile } from '@/lib/wallet';
 import { buildTransactionBlob, submitSignedTransaction } from '@/lib/blockchain';
+import { trackAnchoringStart, trackAnchoringSubStep, trackAnchoringSuccess, trackAnchoringError, trackAnchoringRetry } from '@/lib/analytics';
 import type { SigningSession } from '@/types/signing';
 
 interface StepProps {
@@ -36,8 +37,10 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
 
   async function runAnchoringFlow() {
     try {
+      trackAnchoringStart();
       // Step 1: Embed signature into PDF
       setSubStep('embedding');
+      trackAnchoringSubStep('embedding');
       const pdfBytes = new Uint8Array(await session.pdfFile!.arrayBuffer());
       const finalPdf = await embedSignatureOnPdf(pdfBytes, {
         signatureImage: session.signatureImage,
@@ -50,10 +53,12 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
 
       // Step 2: Hash the final PDF (CRITICAL: this is the canonical hash)
       setSubStep('hashing');
+      trackAnchoringSubStep('hashing');
       const documentHash = await computeSHA256(finalPdf);
 
       // Step 3: Wallet signs the document hash
       setSubStep('signing');
+      trackAnchoringSubStep('signing');
       let digitalSignature: string;
       let signerPublicKey: string;
 
@@ -71,6 +76,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
 
       // Step 4: Submit anchorDocument transaction
       setSubStep('anchoring');
+      trackAnchoringSubStep('anchoring');
       const contractAddress = process.env.NEXT_PUBLIC_ZETRIX_CONTRACT_ADDRESS!;
       const anchorInput = {
         method: 'anchorDocument',
@@ -106,6 +112,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
 
       // Step 5: Save session to DB
       setSubStep('saving');
+      trackAnchoringSubStep('saving');
       await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,11 +139,13 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       });
 
       setSubStep('done');
+      trackAnchoringSuccess(txHash);
       // Auto-advance after brief delay
       setTimeout(() => nextStep(), 1500);
     } catch (err) {
       console.error('[Anchoring] Failed at sub-step:', subStep, err);
       const message = err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
+      trackAnchoringError(subStep, message || 'Unknown error');
       setError(message || 'Anchoring failed');
       setFailedAt(subStep);
       setSubStep('error');
@@ -182,7 +191,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         {error && (
           <div className="space-y-2">
             <p className="text-sm text-destructive">{error}</p>
-            <Button onClick={() => { started.current = false; setError(''); setFailedAt(null); runAnchoringFlow(); }}>
+            <Button onClick={() => { trackAnchoringRetry(); started.current = false; setError(''); setFailedAt(null); runAnchoringFlow(); }}>
               Retry
             </Button>
           </div>

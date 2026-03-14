@@ -1,7 +1,6 @@
-import Link from 'next/link';
 import { Upload, ShieldCheck, Link2, FileSignature } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { LandingCTA } from '@/components/layout/landing-cta';
 
 const features = [
   {
@@ -34,14 +33,7 @@ export default function LandingPage() {
           Sign documents with blockchain-backed cryptographic proof.
           Verify authenticity instantly. Tamper-proof and decentralized.
         </p>
-        <div className="flex gap-4">
-          <Link href="/sign">
-            <Button size="lg">Upload Document to Start</Button>
-          </Link>
-          <Link href="/verify">
-            <Button size="lg" variant="outline">Verify a Document</Button>
-          </Link>
-        </div>
+        <LandingCTA />
       </section>
 
       {/* Features Section */}

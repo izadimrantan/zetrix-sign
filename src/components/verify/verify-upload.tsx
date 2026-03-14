@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Upload, FileSearch, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { computeSHA256 } from '@/lib/hash';
+import { trackVerifyFileUpload } from '@/lib/analytics';
 
 interface Props {
   onHashComputed: (hash: string, fileName: string) => void;
@@ -29,6 +30,7 @@ export function VerifyUpload({ onHashComputed, isLoading }: Props) {
       return;
     }
     setFileName(file.name);
+    trackVerifyFileUpload(file.name);
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const hash = await computeSHA256(bytes);

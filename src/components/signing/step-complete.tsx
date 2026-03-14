@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { truncateAddress } from '@/lib/utils';
+import { trackSignedPdfDownload, trackVerifyOnChainClick, trackSignAnotherDocument } from '@/lib/analytics';
 import type { SigningSession } from '@/types/signing';
 
 interface StepProps {
@@ -77,10 +78,10 @@ export function StepComplete({ session, resetSession, signedPdfBytesRef }: StepP
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button className="flex-1" onClick={handleDownload}>
+          <Button className="flex-1" onClick={() => { trackSignedPdfDownload(); handleDownload(); }}>
             <Download className="mr-2 h-4 w-4" /> Download Signed PDF
           </Button>
-          <Link href={`/verify?hash=${session.documentHash}&file=${encodeURIComponent(session.pdfFile?.name || '')}`} className="flex-1">
+          <Link href={`/verify?hash=${session.documentHash}&file=${encodeURIComponent(session.pdfFile?.name || '')}`} className="flex-1" onClick={() => trackVerifyOnChainClick(session.documentHash)}>
             <Button variant="outline" className="w-full">
               <ExternalLink className="mr-2 h-4 w-4" /> Verify On Chain
             </Button>
@@ -88,7 +89,7 @@ export function StepComplete({ session, resetSession, signedPdfBytesRef }: StepP
         </div>
 
         <div className="text-center">
-          <Button variant="ghost" onClick={resetSession}>Sign Another Document</Button>
+          <Button variant="ghost" onClick={() => { trackSignAnotherDocument(); resetSession(); }}>Sign Another Document</Button>
         </div>
       </CardContent>
     </Card>

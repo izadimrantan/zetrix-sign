@@ -1,9 +1,10 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { SigningStep } from '@/types/signing';
 import { useSigningSession } from '@/hooks/use-signing-session';
 import { cn } from '@/lib/utils';
+import { trackStepEnter } from '@/lib/analytics';
 import { StepUpload } from './step-upload';
 import { StepWalletIdentity } from './step-wallet-identity';
 import { StepSignature } from './step-signature';
@@ -20,6 +21,11 @@ const STEP_LABELS = [
 export function SigningStepper() {
   const { session, updateSession, nextStep, prevStep, goToStep, resetSession } = useSigningSession();
   const currentStep = session.currentStep;
+
+  // Track step changes
+  useEffect(() => {
+    trackStepEnter(currentStep + 1, STEP_LABELS[currentStep]);
+  }, [currentStep]);
 
   // Holds the signed PDF bytes from the anchoring step for download in the completion step.
   // Using useRef because Uint8Array should not be in React state (non-serializable, large).

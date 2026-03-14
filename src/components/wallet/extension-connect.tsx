@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { isExtensionAvailable, connectExtension } from '@/lib/wallet';
+import { trackWalletConnectStart, trackWalletConnectSuccess, trackWalletConnectError } from '@/lib/analytics';
 import type { WalletConnectResult } from '@/types/wallet';
 
 interface Props {
@@ -18,11 +19,15 @@ export function ExtensionConnect({ onConnected }: Props) {
   const handleConnect = async () => {
     setStatus('loading');
     setError('');
+    trackWalletConnectStart('extension');
     try {
       const result = await connectExtension();
+      trackWalletConnectSuccess('extension', result.address);
       onConnected(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Connection failed');
+      const msg = err instanceof Error ? err.message : 'Connection failed';
+      trackWalletConnectError('extension', msg);
+      setError(msg);
       setStatus('error');
     }
   };
