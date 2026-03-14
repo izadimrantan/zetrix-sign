@@ -1,12 +1,11 @@
 export enum SigningStep {
   Upload = 0,
-  Wallet = 1,
-  Credential = 2,
-  Signature = 3,
-  Placement = 4,
-  Review = 5,
-  Anchoring = 6,
-  Complete = 7,
+  WalletIdentity = 1,
+  Signature = 2,
+  Placement = 3,
+  Review = 4,
+  Anchoring = 5,
+  Complete = 6,
 }
 
 export interface SignaturePosition {

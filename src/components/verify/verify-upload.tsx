@@ -57,6 +57,9 @@ export function VerifyUpload({ onHashComputed, isLoading }: Props) {
         <p className="text-sm text-muted-foreground">
           Upload a previously signed PDF to verify its authenticity against the blockchain.
         </p>
+        <p className="text-xs text-muted-foreground/70">
+          You can only verify one PDF at a time.
+        </p>
 
         {isLoading ? (
           <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-12">

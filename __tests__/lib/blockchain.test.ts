@@ -73,14 +73,14 @@ describe('buildTransactionBlob', () => {
     mockFetch.mockReset();
   });
 
-  it('sends correct request to /api/contract/build-blob', async () => {
+  it('sends correct request to /api/contract/build-blob and returns blob + hash', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ success: true, transactionBlob: 'BLOB_HEX_123' }),
+      json: async () => ({ success: true, transactionBlob: 'BLOB_HEX_123', hash: 'HASH_456' }),
     });
 
-    const blob = await buildTransactionBlob('ZTX_ADDR', { method: 'anchorDocument', params: {} });
-    expect(blob).toBe('BLOB_HEX_123');
+    const result = await buildTransactionBlob('ZTX_ADDR', { method: 'anchorDocument', params: {} });
+    expect(result).toEqual({ transactionBlob: 'BLOB_HEX_123', hash: 'HASH_456' });
   });
 });
 
@@ -95,7 +95,7 @@ describe('submitSignedTransaction', () => {
       json: async () => ({ success: true, hash: 'TX_HASH_ABC' }),
     });
 
-    const txHash = await submitSignedTransaction('BLOB_HEX', 'SIGN_DATA', 'PUB_KEY');
+    const txHash = await submitSignedTransaction('BLOB_HEX', 'SIGN_DATA', 'PUB_KEY', 'HASH_789', 'ZTX_ADDR');
     expect(txHash).toBe('TX_HASH_ABC');
   });
 });

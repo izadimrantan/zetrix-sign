@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const NODE_URL = process.env.ZETRIX_NODE_URL!;
+const MICROSERVICE_URL = process.env.MICROSERVICE_BASE_URL;
+const MICROSERVICE_TOKEN = process.env.MICROSERVICE_AUTH_TOKEN;
+const MICROSERVICE_API_KEY = process.env.MICROSERVICE_API_KEY;
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,43 +15,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const ZtxChainSDK = (await import('zetrix-sdk-nodejs')).default;
-    const sdk = new ZtxChainSDK({ host: NODE_URL });
-
-    // Get nonce
-    const nonceResult = await sdk.account.getNonce(sourceAddress);
-    if (nonceResult.errorCode !== 0) {
-      throw new Error(nonceResult.errorDesc || 'Failed to get nonce');
-    }
-    const nonce = (nonceResult.result?.nonce ?? 0) + 1;
-
-    // Build contract invoke operation
-    const operationResult = await sdk.operation.contractInvokeByGasOperation({
-      sourceAddress,
-      contractAddress,
-      amount: '0',
-      input,
-    });
-    if (operationResult.errorCode !== 0) {
-      throw new Error(operationResult.errorDesc || 'Failed to build operation');
+    if (!MICROSERVICE_URL || !MICROSERVICE_API_KEY) {
+      return NextResponse.json(
+        { success: false, error: 'Microservice not configured' },
+        { status: 500 }
+      );
     }
 
-    // Build transaction blob
-    const blobResult = await sdk.transaction.buildBlob({
-      sourceAddress,
-      gasPrice: '1000',
-      feeLimit: '1000000',
-      nonce: String(nonce),
-      operations: [operationResult.result.operation],
+    // Parse the input JSON to extract method and params for the microservice
+    const parsed = JSON.parse(input);
+    const method = parsed.method;
+    const inputParameters = parsed.params || {};
+
+    const response = await fetch(`${MICROSERVICE_URL}/ztx/contract/generate-blob`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${MICROSERVICE_TOKEN}`,
+        'x-api-key': `${MICROSERVICE_API_KEY}`
+      },
+      body: JSON.stringify({
+        txInitiator: sourceAddress,
+        sourceAddress,
+        contractAddress: contractAddress,
+        method,
+        inputParameters,
+      }),
     });
-    if (blobResult.errorCode !== 0) {
-      throw new Error(blobResult.errorDesc || 'Failed to build transaction blob');
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      throw new Error(`Microservice blob generation failed (${response.status}): ${errorBody}`);
+    }
+
+    const result = await response.json();
+    const blob = result.object?.blob || result.blob;
+    const hash = result.object?.hash || result.hash;
+
+    if (!blob) {
+      throw new Error('No blob returned from microservice');
     }
 
     return NextResponse.json({
       success: true,
-      transactionBlob: blobResult.result.transactionBlob,
-      hash: blobResult.result.hash,
+      transactionBlob: blob,
+      hash: hash || '',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

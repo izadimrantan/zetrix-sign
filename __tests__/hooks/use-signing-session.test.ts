@@ -18,9 +18,9 @@ describe('useSigningSession', () => {
   it('goToStep changes the current step', () => {
     const { result } = renderHook(() => useSigningSession());
     act(() => {
-      result.current.goToStep(SigningStep.Wallet);
+      result.current.goToStep(SigningStep.WalletIdentity);
     });
-    expect(result.current.session.currentStep).toBe(SigningStep.Wallet);
+    expect(result.current.session.currentStep).toBe(SigningStep.WalletIdentity);
   });
 
   it('nextStep increments the step', () => {
@@ -28,7 +28,7 @@ describe('useSigningSession', () => {
     act(() => {
       result.current.nextStep();
     });
-    expect(result.current.session.currentStep).toBe(SigningStep.Wallet);
+    expect(result.current.session.currentStep).toBe(SigningStep.WalletIdentity);
   });
 
   it('prevStep decrements the step but not below 0', () => {

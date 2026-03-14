@@ -1,53 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_ZETRIX_CONTRACT_ADDRESS!;
-const NODE_URL = process.env.ZETRIX_NODE_URL!;
-const MICROSERVICE_URL = process.env.NEXT_PUBLIC_MICROSERVICE_BASE_URL;
+const MICROSERVICE_URL = process.env.MICROSERVICE_BASE_URL;
 const MICROSERVICE_TOKEN = process.env.MICROSERVICE_AUTH_TOKEN;
-
-async function validateViaSDK(documentHash: string) {
-  const ZtxChainSDK = (await import('zetrix-sdk-nodejs')).default;
-  const sdk = new ZtxChainSDK({ host: NODE_URL });
-
-  const result = await sdk.contract.call({
-    optType: 2,
-    contractAddress: CONTRACT_ADDRESS,
-    input: JSON.stringify({ method: 'isValidated', params: { documentHash } }),
-  });
-
-  if (result.errorCode !== 0) {
-    throw new Error(result.errorDesc || 'SDK validation query failed');
-  }
-
-  const queryRets = result.result?.query_rets;
-  if (queryRets && queryRets.length > 0) {
-    return JSON.parse(queryRets[0].result);
-  }
-
-  throw new Error('Empty response from validation query');
-}
-
-async function validateViaMicroservice(documentHash: string) {
-  if (!MICROSERVICE_URL || !MICROSERVICE_TOKEN) {
-    throw new Error('Microservice not configured');
-  }
-
-  const response = await fetch(`${MICROSERVICE_URL}/ztx/contract/query-address`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${MICROSERVICE_TOKEN}`,
-    },
-    body: JSON.stringify({
-      address: CONTRACT_ADDRESS,
-      method: 'isValidated',
-      inputParameters: { documentHash },
-    }),
-  });
-
-  if (!response.ok) throw new Error(`Microservice failed: ${response.status}`);
-  return response.json();
-}
+const MICROSERVICE_API_KEY = process.env.MICROSERVICE_API_KEY;
 
 export async function POST(request: NextRequest) {
   try {
@@ -60,12 +17,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let data: unknown;
-    try {
-      data = await validateViaSDK(documentHash);
-    } catch (sdkError) {
-      console.warn('[contract/validate] SDK failed, trying fallback:', sdkError);
-      data = await validateViaMicroservice(documentHash);
+    if (!MICROSERVICE_URL || !MICROSERVICE_API_KEY) {
+      return NextResponse.json(
+        { success: false, error: 'Microservice not configured' },
+        { status: 500 }
+      );
+    }
+
+    const response = await fetch(`${MICROSERVICE_URL}/ztx/contract/query-address`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${MICROSERVICE_TOKEN}`,
+        'x-api-key': `${MICROSERVICE_API_KEY}`
+      },
+      body: JSON.stringify({
+        address: CONTRACT_ADDRESS,
+        method: 'isValidated',
+        inputParameters: { documentHash },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Microservice validation query failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    // Microservice returns: { result: { type: "string", value: "<JSON string>" } }
+    // We need to parse the nested JSON string into a proper ValidationResult object
+    const rawValue = result?.result?.value || result?.object?.result?.value;
+    let data = result;
+    if (rawValue && typeof rawValue === 'string') {
+      data = JSON.parse(rawValue);
+    }
+
+    // Look up the txHash from the sessions DB (not stored in the contract)
+    if (data.isValid) {
+      try {
+        const session = await prisma.signingSession.findFirst({
+          where: { documentHash },
+          select: { txHash: true },
+        });
+        if (session?.txHash) {
+          data.txHash = session.txHash;
+        }
+      } catch {
+        // DB lookup failure is non-critical — continue without txHash
+      }
     }
 
     return NextResponse.json({ success: true, data });

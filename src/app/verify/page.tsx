@@ -34,7 +34,8 @@ function VerifyContent() {
     const hash = searchParams.get('hash');
     if (hash && /^[a-f0-9]{64}$/i.test(hash)) {
       setDocumentHash(hash);
-      setFileName('(hash provided via link)');
+      const fileParam = searchParams.get('file');
+      setFileName(fileParam ? decodeURIComponent(fileParam) : '(hash provided via link)');
       verifyHash(hash);
     }
   }, [searchParams, verifyHash]);

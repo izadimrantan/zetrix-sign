@@ -13,6 +13,7 @@ export interface ValidationResult {
   signerAddress?: string;
   credentialID?: string;
   timestamp?: number;
+  txHash?: string;
 }
 
 // getRecord response from contract
@@ -57,6 +58,7 @@ export interface SubmitSignedRequest {
   transactionBlob: string;
   signData: string;
   publicKey: string;
+  hash: string;
 }
 
 export interface SubmitSignedResponse {

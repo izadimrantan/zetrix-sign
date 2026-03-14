@@ -4,6 +4,7 @@ import './globals.css';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Toaster } from 'sonner';
+import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -19,7 +20,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />
-        <Toaster />
+        <Toaster position="top-right" />
+        <GoogleAnalytics />
       </body>
     </html>
   );

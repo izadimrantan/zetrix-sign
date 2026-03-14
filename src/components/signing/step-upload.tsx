@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { Upload, FileText, X } from 'lucide-react';
+import { Upload, FileText, X, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPdfPageCount } from '@/lib/pdf';
@@ -101,6 +101,13 @@ export function StepUpload({ session, updateSession, nextStep }: StepProps) {
             </Button>
           </div>
         )}
+
+        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+          <p className="text-sm text-blue-800 dark:text-blue-300">
+            Only one document can be signed at a time. Signing is performed locally in your browser — your document is never uploaded to any server.
+          </p>
+        </div>
 
         <div className="flex justify-end">
           <Button onClick={nextStep} disabled={!session.pdfFile}>

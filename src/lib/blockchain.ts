@@ -1,8 +1,7 @@
 import type { ValidationResult, ContractQueryResponse, BuildBlobResponse, SubmitSignedResponse } from '@/types/contract';
 
 /**
- * Generic contract query — calls our API route which uses zetrix-sdk-nodejs.
- * The API route handles SDK-primary + microservice-fallback internally.
+ * Generic contract query — calls our API route which proxies to the microservice.
  */
 export async function queryContract(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
   const response = await fetch('/api/contract/query', {
@@ -37,12 +36,13 @@ export async function validateDocument(documentHash: string): Promise<Validation
 
 /**
  * Build a transaction blob server-side (for extension wallet flow).
- * Server uses zetrix-sdk-nodejs to build the blob; client then signs it.
+ * Server proxies to the microservice to generate the blob; client then signs it.
+ * Returns both the blob and the hash (needed for submit).
  */
 export async function buildTransactionBlob(
   sourceAddress: string,
   input: { method: string; params: Record<string, unknown> }
-): Promise<string> {
+): Promise<{ transactionBlob: string; hash: string }> {
   const response = await fetch('/api/contract/build-blob', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -57,21 +57,24 @@ export async function buildTransactionBlob(
   if (!response.ok || !data.success || !data.transactionBlob) {
     throw new Error(data.error || 'Failed to build transaction blob');
   }
-  return data.transactionBlob;
+  return { transactionBlob: data.transactionBlob, hash: data.hash || '' };
 }
 
 /**
- * Submit a wallet-signed blob to the blockchain via our API route.
+ * Submit a wallet-signed blob to the blockchain via the microservice.
+ * The hash from build-blob must be forwarded for the microservice to accept the tx.
  */
 export async function submitSignedTransaction(
   transactionBlob: string,
   signData: string,
-  publicKey: string
+  publicKey: string,
+  hash: string,
+  sourceAddress: string
 ): Promise<string> {
   const response = await fetch('/api/contract/submit-signed', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transactionBlob, signData, publicKey }),
+    body: JSON.stringify({ transactionBlob, signData, publicKey, hash, sourceAddress }),
   });
 
   const data: SubmitSignedResponse = await response.json();

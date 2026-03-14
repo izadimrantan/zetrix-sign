@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { embedSignatureOnPdf } from '@/lib/pdf';
 import { computeSHA256 } from '@/lib/hash';
-import { signMessageExtension, signMessageMobile, sendTransactionMobile, signBlobMobile } from '@/lib/wallet';
+import { signMessageExtension, signMessageMobile, sendTransactionMobile } from '@/lib/wallet';
 import { buildTransactionBlob, submitSignedTransaction } from '@/lib/blockchain';
 import type { SigningSession } from '@/types/signing';
 
@@ -24,6 +24,7 @@ type SubStep = 'embedding' | 'hashing' | 'signing' | 'anchoring' | 'saving' | 'd
 export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytesRef }: StepProps) {
   const [subStep, setSubStep] = useState<SubStep>('embedding');
   const [error, setError] = useState('');
+  const [failedAt, setFailedAt] = useState<SubStep | null>(null);
   const started = useRef(false);
 
   useEffect(() => {
@@ -57,7 +58,9 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       let signerPublicKey: string;
 
       if (session.connectionMethod === 'extension') {
+        console.log('[Anchoring] Requesting extension to sign document hash...');
         const signResult = await signMessageExtension(documentHash);
+        console.log('[Anchoring] Document hash signed:', { signData: signResult.signData?.slice(0, 20) + '...', publicKey: signResult.publicKey?.slice(0, 20) + '...' });
         digitalSignature = signResult.signData;
         signerPublicKey = signResult.publicKey || session.publicKey;
       } else {
@@ -87,10 +90,18 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
           data: JSON.stringify(anchorInput),
         });
       } else {
-        // Extension: build-blob -> signBlob -> submit-signed
-        const blob = await buildTransactionBlob(session.walletAddress, anchorInput);
-        const blobSign = await signBlobMobile(blob); // signBlob is available in wallet SDK
-        txHash = await submitSignedTransaction(blob, blobSign.signData, blobSign.publicKey || session.publicKey);
+        // Extension: build-blob -> sign blob via extension -> submit-signed
+        console.log('[Anchoring] Building transaction blob...');
+        const { transactionBlob: blob, hash: blobHash } = await buildTransactionBlob(session.walletAddress, anchorInput);
+        console.log('[Anchoring] Blob built (length:', blob.length, '), blob preview:', blob.slice(0, 40) + '...');
+        // Delay to let the extension reset after the first signMessage call
+        console.log('[Anchoring] Waiting 5s for extension to reset before second signMessage...');
+        await new Promise(r => setTimeout(r, 5_000));
+        console.log('[Anchoring] Requesting extension to sign blob via signMessage...');
+        const blobSign = await signMessageExtension(blob);
+        console.log('[Anchoring] Blob signed, submitting to blockchain...');
+        txHash = await submitSignedTransaction(blob, blobSign.signData, blobSign.publicKey || session.publicKey, blobHash, session.walletAddress);
+        console.log('[Anchoring] Transaction submitted, txHash:', txHash);
       }
 
       // Step 5: Save session to DB
@@ -124,7 +135,10 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       // Auto-advance after brief delay
       setTimeout(() => nextStep(), 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Anchoring failed');
+      console.error('[Anchoring] Failed at sub-step:', subStep, err);
+      const message = err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
+      setError(message || 'Anchoring failed');
+      setFailedAt(subStep);
       setSubStep('error');
     }
   }
@@ -138,7 +152,9 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
     { key: 'done', label: 'Anchoring complete!' },
   ];
 
-  const currentIdx = steps.findIndex((s) => s.key === subStep);
+  const isError = subStep === 'error';
+  const activeStep = isError ? failedAt : subStep;
+  const currentIdx = steps.findIndex((s) => s.key === activeStep);
 
   return (
     <Card>
@@ -150,11 +166,11 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
           {steps.map((step, idx) => (
             <div key={step.key} className="flex items-center gap-3">
               {idx < currentIdx && <CheckCircle className="h-5 w-5 text-green-500" />}
-              {idx === currentIdx && subStep !== 'error' && subStep !== 'done' && (
+              {idx === currentIdx && !isError && subStep !== 'done' && (
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
               )}
               {idx === currentIdx && subStep === 'done' && <CheckCircle className="h-5 w-5 text-green-500" />}
-              {idx === currentIdx && subStep === 'error' && <XCircle className="h-5 w-5 text-destructive" />}
+              {idx === currentIdx && isError && <XCircle className="h-5 w-5 text-destructive" />}
               {idx > currentIdx && <div className="h-5 w-5 rounded-full border" />}
               <span className={idx <= currentIdx ? 'font-medium' : 'text-muted-foreground'}>
                 {step.label}
@@ -166,7 +182,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         {error && (
           <div className="space-y-2">
             <p className="text-sm text-destructive">{error}</p>
-            <Button onClick={() => { started.current = false; setError(''); runAnchoringFlow(); }}>
+            <Button onClick={() => { started.current = false; setError(''); setFailedAt(null); runAnchoringFlow(); }}>
               Retry
             </Button>
           </div>

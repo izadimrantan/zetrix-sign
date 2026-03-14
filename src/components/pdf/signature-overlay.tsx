@@ -1,7 +1,17 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import type { SignaturePosition } from '@/types/signing';
+
+const NUDGE_KEYFRAMES = `
+@keyframes signature-nudge {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-8px, 0); }
+  40% { transform: translate(8px, 0); }
+  60% { transform: translate(-4px, 0); }
+  80% { transform: translate(4px, 0); }
+}
+`;
 
 interface Props {
   signatureImage: string;
@@ -22,10 +32,17 @@ export function SignatureOverlay({
 }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(true);
   const dragStart = useRef({ x: 0, y: 0 });
 
-  // Default position if none set
-  const pos = position || { x: 0.3, y: 0.7, page: currentPage, width: 0.3, height: 0.08 };
+  // Stop nudge animation after it plays
+  useEffect(() => {
+    const timer = setTimeout(() => setIsAnimating(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Default position: top-right corner
+  const pos = position || { x: 0.65, y: 0.03, page: currentPage, width: 0.3, height: 0.08 };
   const absX = pos.x * containerWidth;
   const absY = pos.y * containerHeight;
   const absW = pos.width * containerWidth;
@@ -33,6 +50,7 @@ export function SignatureOverlay({
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    setIsAnimating(false);
     setIsDragging(true);
     dragStart.current = { x: e.clientX - absX, y: e.clientY - absY };
 
@@ -53,28 +71,33 @@ export function SignatureOverlay({
   }, [absX, absY, containerWidth, containerHeight, pos, currentPage, onPositionChange]);
 
   return (
-    <div
-      ref={overlayRef}
-      onMouseDown={handleMouseDown}
-      style={{
-        position: 'absolute',
-        left: `${absX}px`,
-        top: `${absY}px`,
-        width: `${absW}px`,
-        height: `${absH}px`,
-        cursor: isDragging ? 'grabbing' : 'grab',
-        border: '2px dashed hsl(var(--primary))',
-        borderRadius: '4px',
-        background: 'rgba(123, 30, 30, 0.05)',
-        zIndex: 10,
-      }}
-    >
-      <img
-        src={signatureImage}
-        alt="Signature"
-        className="h-full w-full object-contain pointer-events-none"
-        draggable={false}
-      />
-    </div>
+    <>
+      <style dangerouslySetInnerHTML={{ __html: NUDGE_KEYFRAMES }} />
+      <div
+        ref={overlayRef}
+        onMouseDown={handleMouseDown}
+        style={{
+          position: 'absolute',
+          left: `${absX}px`,
+          top: `${absY}px`,
+          width: `${absW}px`,
+          height: `${absH}px`,
+          cursor: isDragging ? 'grabbing' : 'grab',
+          border: '2.5px solid #7b1e1e',
+          borderRadius: '6px',
+          background: 'rgba(255, 255, 255, 0.95)',
+          boxShadow: '0 6px 20px rgba(123, 30, 30, 0.3), 0 0 0 1px rgba(123, 30, 30, 0.2)',
+          zIndex: 10,
+          animation: isAnimating ? 'signature-nudge 0.8s ease-in-out 0.4s' : 'none',
+        }}
+      >
+        <img
+          src={signatureImage}
+          alt="Signature"
+          className="h-full w-full object-contain pointer-events-none"
+          draggable={false}
+        />
+      </div>
+    </>
   );
 }

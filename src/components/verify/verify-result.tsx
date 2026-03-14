@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -26,7 +26,7 @@ function getResultDisplay(result: ValidationResult) {
     };
   }
 
-  if (result.reason.includes('revoked')) {
+  if (result.reason?.includes('revoked')) {
     return {
       icon: AlertTriangle,
       iconColor: 'text-orange-500',
@@ -38,7 +38,7 @@ function getResultDisplay(result: ValidationResult) {
     };
   }
 
-  if (result.reason.includes('No record')) {
+  if (result.reason?.includes('No record')) {
     return {
       icon: XCircle,
       iconColor: 'text-red-500',
@@ -103,13 +103,30 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
               <span className="text-muted-foreground">Signed At</span>
               <span>{result.timestamp ? formatTimestamp(result.timestamp) : 'Unknown'}</span>
             </div>
+            {result.txHash && (
+              <>
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Transaction Hash</span>
+                  <span className="font-mono text-xs">{truncateAddress(result.txHash, 10, 10)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Explorer</span>
+                  <a
+                    href={`${process.env.NEXT_PUBLIC_ZETRIX_EXPLORER_URL}/tx/${result.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    View on Zetrix Explorer
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </>
+            )}
           </>
         )}
-        <Separator />
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Reason</span>
-          <span className="text-xs">{result.reason}</span>
-        </div>
       </CardContent>
     </Card>
   );

@@ -80,7 +80,7 @@ export function StepComplete({ session, resetSession, signedPdfBytesRef }: StepP
           <Button className="flex-1" onClick={handleDownload}>
             <Download className="mr-2 h-4 w-4" /> Download Signed PDF
           </Button>
-          <Link href={`/verify?hash=${session.documentHash}`} className="flex-1">
+          <Link href={`/verify?hash=${session.documentHash}&file=${encodeURIComponent(session.pdfFile?.name || '')}`} className="flex-1">
             <Button variant="outline" className="w-full">
               <ExternalLink className="mr-2 h-4 w-4" /> Verify On Chain
             </Button>

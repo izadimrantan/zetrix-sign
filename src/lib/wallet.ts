@@ -58,9 +58,49 @@ export function signMessageExtension(message: string): Promise<WalletSignResult>
       reject(new Error('Zetrix wallet extension not installed'));
       return;
     }
+
+    // Timeout to prevent hanging if extension channel closes silently
+    const timeout = setTimeout(() => {
+      reject(new Error('Extension signing timed out — wallet did not respond within 120s'));
+    }, 120_000);
+
+    console.log('[wallet] signMessage called, message length:', message.length);
+
     window.zetrix.signMessage({ message }, (res) => {
+      clearTimeout(timeout);
+      console.log('[wallet] signMessage callback received, code:', res.code);
       if (res.code !== 0 || !res.data?.signData) {
-        reject(new Error(res.message || 'Extension signing failed'));
+        reject(new Error(res.message || `Extension signing failed (code: ${res.code})`));
+        return;
+      }
+      resolve({
+        signData: res.data.signData,
+        publicKey: res.data.publicKey || '',
+      });
+    });
+  });
+}
+
+export function signBlobExtension(blob: string): Promise<WalletSignResult> {
+  return new Promise((resolve, reject) => {
+    if (!window.zetrix) {
+      reject(new Error('Zetrix wallet extension not installed'));
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      reject(new Error('Extension blob signing timed out — wallet did not respond within 120s'));
+    }, 120_000);
+
+    // Normalize to lowercase hex — the extension may reject mixed/uppercase hex
+    const normalizedBlob = blob.toLowerCase();
+    console.log('[wallet] signBlob called, blob length:', normalizedBlob.length, ', first 20 chars:', normalizedBlob.slice(0, 20));
+
+    window.zetrix.signBlob({ message: normalizedBlob }, (res) => {
+      clearTimeout(timeout);
+      console.log('[wallet] signBlob callback received, code:', res.code);
+      if (res.code !== 0 || !res.data?.signData) {
+        reject(new Error(res.message || `Extension blob signing failed (code: ${res.code})`));
         return;
       }
       resolve({

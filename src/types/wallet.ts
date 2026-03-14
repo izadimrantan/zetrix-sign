@@ -8,6 +8,10 @@ export interface ZetrixExtension {
     params: { message: string },
     callback: (res: ZetrixExtensionResponse) => void
   ): void;
+  signBlob(
+    params: { message: string },
+    callback: (res: ZetrixExtensionResponse) => void
+  ): void;
 }
 
 export interface ZetrixExtensionResponse {
