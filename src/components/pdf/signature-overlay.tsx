@@ -48,6 +48,7 @@ export function SignatureOverlay({
   const absW = pos.width * containerWidth;
   const absH = pos.height * containerHeight;
 
+  // Mouse drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsAnimating(false);
@@ -70,12 +71,40 @@ export function SignatureOverlay({
     document.addEventListener('mouseup', handleMouseUp);
   }, [absX, absY, containerWidth, containerHeight, pos, currentPage, onPositionChange]);
 
+  // Touch drag handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // Prevent page scroll while dragging signature
+    e.stopPropagation();
+    setIsAnimating(false);
+    setIsDragging(true);
+    const touch = e.touches[0];
+    dragStart.current = { x: touch.clientX - absX, y: touch.clientY - absY };
+
+    const handleTouchMove = (te: TouchEvent) => {
+      te.preventDefault(); // Prevent scroll during drag
+      const t = te.touches[0];
+      const newX = Math.max(0, Math.min((t.clientX - dragStart.current.x) / containerWidth, 1 - pos.width));
+      const newY = Math.max(0, Math.min((t.clientY - dragStart.current.y) / containerHeight, 1 - pos.height));
+      onPositionChange({ ...pos, x: newX, y: newY, page: currentPage });
+    };
+
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd);
+  }, [absX, absY, containerWidth, containerHeight, pos, currentPage, onPositionChange]);
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: NUDGE_KEYFRAMES }} />
       <div
         ref={overlayRef}
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
         style={{
           position: 'absolute',
           left: `${absX}px`,
@@ -88,6 +117,7 @@ export function SignatureOverlay({
           background: 'rgba(255, 255, 255, 0.95)',
           boxShadow: '0 6px 20px rgba(123, 30, 30, 0.3), 0 0 0 1px rgba(123, 30, 30, 0.2)',
           zIndex: 10,
+          touchAction: 'none', // Prevent browser scroll/zoom on touch
           animation: isAnimating ? 'signature-nudge 0.8s ease-in-out 0.4s' : 'none',
         }}
       >

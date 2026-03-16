@@ -68,7 +68,9 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
   const Icon = display.icon;
 
   return (
-    <Card className={`border ${display.bgColor}`}>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className={`relative overflow-hidden border-[var(--zetrix-border)] shadow-sm border ${display.bgColor}`}>
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader className="text-center">
         <Icon className={`mx-auto h-12 w-12 ${display.iconColor}`} />
         <div className="flex items-center justify-center gap-2">
@@ -78,26 +80,26 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
         <p className="text-sm text-muted-foreground">{display.description}</p>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">File</span>
-          <span className="font-medium">{fileName}</span>
+        <div className="flex justify-between gap-4 text-sm">
+          <span className="shrink-0 text-muted-foreground">File</span>
+          <span className="text-right font-medium">{fileName}</span>
         </div>
         <Separator />
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Document Hash</span>
-          <span className="font-mono text-xs">{truncateAddress(documentHash, 10, 10)}</span>
+          <span className="font-mono">{truncateAddress(documentHash, 10, 10)}</span>
         </div>
         {result.isValid && (
           <>
             <Separator />
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Signer</span>
-              <span className="font-mono text-xs">{truncateAddress(result.signerAddress || '', 10, 8)}</span>
+              <span className="font-mono">{truncateAddress(result.signerAddress || '', 10, 8)}</span>
             </div>
             <Separator />
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Credential ID</span>
-              <span className="font-mono text-xs">{result.credentialID}</span>
+              <span className="font-mono">{result.credentialID}</span>
             </div>
             <Separator />
             <div className="flex justify-between text-sm">
@@ -109,7 +111,7 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
                 <Separator />
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Transaction Hash</span>
-                  <span className="font-mono text-xs">{truncateAddress(result.txHash, 10, 10)}</span>
+                  <span className="font-mono">{truncateAddress(result.txHash, 10, 10)}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between text-sm">
@@ -118,7 +120,7 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
                     href={`${process.env.NEXT_PUBLIC_ZETRIX_EXPLORER_URL}/tx/${result.txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
                     onClick={() => trackExplorerLinkClick(result.txHash!)}
                   >
                     View on Zetrix Explorer
@@ -131,5 +133,6 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }

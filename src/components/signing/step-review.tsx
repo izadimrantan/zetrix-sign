@@ -16,7 +16,9 @@ interface StepProps {
 
 export function StepReview({ session, nextStep, prevStep }: StepProps) {
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader>
         <CardTitle>Review & Confirm</CardTitle>
       </CardHeader>
@@ -29,7 +31,7 @@ export function StepReview({ session, nextStep, prevStep }: StepProps) {
           <Separator />
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Wallet</span>
-            <span className="font-mono text-xs">{truncateAddress(session.walletAddress)}</span>
+            <span className="font-mono">{truncateAddress(session.walletAddress)}</span>
           </div>
           <Separator />
           <div className="flex justify-between text-sm">
@@ -39,7 +41,7 @@ export function StepReview({ session, nextStep, prevStep }: StepProps) {
           <Separator />
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Credential</span>
-            <span className="font-mono text-xs">{session.credentialID}</span>
+            <span className="font-mono">{session.credentialID}</span>
           </div>
           <Separator />
           <div className="flex justify-between text-sm">
@@ -47,9 +49,9 @@ export function StepReview({ session, nextStep, prevStep }: StepProps) {
             <span className="capitalize">{session.signatureType}</span>
           </div>
           <Separator />
-          <div className="text-sm">
+          <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Signature Preview</span>
-            <img src={session.signatureImage} alt="Signature" className="mt-2 max-h-16" />
+            <img src={session.signatureImage} alt="Signature" className="max-h-12" />
           </div>
         </div>
 
@@ -59,5 +61,6 @@ export function StepReview({ session, nextStep, prevStep }: StepProps) {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

@@ -176,7 +176,9 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
   const currentIdx = steps.findIndex((s) => s.key === activeStep);
 
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader>
         <CardTitle>Blockchain Anchoring</CardTitle>
       </CardHeader>
@@ -224,5 +226,6 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }

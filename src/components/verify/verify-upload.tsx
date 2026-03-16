@@ -48,7 +48,9 @@ export function VerifyUpload({ onHashComputed, isLoading }: Props) {
   };
 
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileSearch className="h-5 w-5" />
@@ -96,5 +98,6 @@ export function VerifyUpload({ onHashComputed, isLoading }: Props) {
         {error && <p className="text-sm text-destructive">{error}</p>}
       </CardContent>
     </Card>
+    </div>
   );
 }

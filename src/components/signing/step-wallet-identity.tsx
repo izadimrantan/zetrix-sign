@@ -3,7 +3,6 @@
 import { CheckCircle, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { WalletConnector } from '@/components/wallet/wallet-connector';
 import { truncateAddress } from '@/lib/utils';
 import { getDummyCredential } from '@/lib/vc';
@@ -42,7 +41,9 @@ export function StepWalletIdentity({ session, updateSession, nextStep, prevStep 
   };
 
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader>
         <CardTitle>Connect Wallet & Verify Identity</CardTitle>
       </CardHeader>
@@ -62,30 +63,37 @@ export function StepWalletIdentity({ session, updateSession, nextStep, prevStep 
 
         {/* Identity Section — appears after wallet connects */}
         {isConnected && (
-          <div className="space-y-4">
-            <div className="rounded-lg border p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <ShieldCheck className="h-8 w-8 text-primary" />
-                <div>
-                  <h3 className="font-semibold">{vc.name}</h3>
-                  <p className="text-sm text-muted-foreground">{vc.did}</p>
-                </div>
-                <Badge variant="secondary" className="ml-auto">Verified</Badge>
+          <div className="rounded-lg border border-[var(--zetrix-border)] p-6">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[var(--zetrix-text-muted)]">Verifiable Credential</p>
+            <div className="mb-4 flex items-center gap-3">
+              <ShieldCheck className="h-8 w-8 text-primary" />
+              <div>
+                <h3 className="font-semibold">{vc.name}</h3>
+                <p className="text-sm text-muted-foreground">{vc.did}</p>
               </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Issuer</span>
-                  <span>{vc.issuer}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Credential ID</span>
-                  <span className="font-mono text-xs">{vc.credentialID}</span>
-                </div>
+            </div>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex items-baseline gap-3">
+                <span className="text-muted-foreground">Issuer</span>
+                <span>{vc.issuer}</span>
+              </div>
+              <div className="flex items-baseline gap-3">
+                <span className="text-muted-foreground">Credential ID</span>
+                <span className="font-mono">{vc.credentialID}</span>
               </div>
             </div>
 
             {!isConfirmed && (
-              <Button onClick={handleConfirmIdentity} className="w-full">Confirm Identity</Button>
+              <div className="mt-5 flex justify-start">
+                <Button onClick={handleConfirmIdentity}>Confirm Identity</Button>
+              </div>
+            )}
+
+            {isConfirmed && (
+              <div className="mt-5 flex items-center gap-2 rounded-md bg-green-50 border border-green-200 px-4 py-2.5">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium text-green-700">Identity Confirmed</span>
+              </div>
             )}
           </div>
         )}
@@ -96,5 +104,6 @@ export function StepWalletIdentity({ session, updateSession, nextStep, prevStep 
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
