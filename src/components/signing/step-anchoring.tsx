@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Smartphone } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { embedSignatureOnPdf } from '@/lib/pdf';
 import { computeSHA256 } from '@/lib/hash';
-import { signMessageExtension, signMessageMobile, sendTransactionMobile } from '@/lib/wallet';
+import { signMessageExtension, signMessageMobile, reconnectAndSignMobile } from '@/lib/wallet';
 import { buildTransactionBlob, submitSignedTransaction } from '@/lib/blockchain';
 import { trackAnchoringStart, trackAnchoringSubStep, trackAnchoringSuccess, trackAnchoringError, trackAnchoringRetry } from '@/lib/analytics';
 import type { SigningSession } from '@/types/signing';
@@ -26,6 +27,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
   const [subStep, setSubStep] = useState<SubStep>('embedding');
   const [error, setError] = useState('');
   const [failedAt, setFailedAt] = useState<SubStep | null>(null);
+  const [mobileQrData, setMobileQrData] = useState('');
   const started = useRef(false);
 
   useEffect(() => {
@@ -38,6 +40,8 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
   async function runAnchoringFlow() {
     try {
       trackAnchoringStart();
+      setMobileQrData('');
+
       // Step 1: Embed signature into PDF
       setSubStep('embedding');
       trackAnchoringSubStep('embedding');
@@ -48,7 +52,6 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         signerName: session.signerName,
         walletAddress: session.walletAddress,
       });
-      // Store in ref so completion step can download the exact bytes that were hashed
       signedPdfBytesRef.current = finalPdf;
 
       // Step 2: Hash the final PDF (CRITICAL: this is the canonical hash)
@@ -69,7 +72,13 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         digitalSignature = signResult.signData;
         signerPublicKey = signResult.publicKey || session.publicKey;
       } else {
-        const signResult = await signMessageMobile(documentHash);
+        // Mobile: reconnect with a fresh QR for auth+sign combined
+        console.log('[Anchoring] Mobile: reconnecting for authAndSignMessage...');
+        const signResult = await reconnectAndSignMobile(documentHash, (qrContent) => {
+          setMobileQrData(qrContent);
+        });
+        setMobileQrData(''); // Clear QR after successful sign
+        console.log('[Anchoring] Mobile hash signed, publicKey:', signResult.publicKey?.slice(0, 20) + '...');
         digitalSignature = signResult.signData;
         signerPublicKey = signResult.publicKey || session.publicKey;
       }
@@ -85,24 +94,24 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
 
       let txHash: string;
 
+      // Both extension and mobile use the same pattern:
+      // build-blob → sign blob → submit signed transaction
+      console.log('[Anchoring] Building transaction blob...');
+      const { transactionBlob: blob, hash: blobHash } = await buildTransactionBlob(session.walletAddress, anchorInput);
+      console.log('[Anchoring] Blob built (length:', blob.length, '), blob preview:', blob.slice(0, 40) + '...');
+
       if (session.connectionMethod === 'mobile') {
-        // Use sendTransaction via mobile SDK -- SDK handles nonce internally
-        txHash = await sendTransactionMobile({
-          from: session.walletAddress,
-          to: contractAddress,
-          nonce: 0, // SDK handles nonce
-          amount: '0',
-          gasFee: '0.01',
-          data: JSON.stringify(anchorInput),
-        });
+        // Mobile: sign blob over the same WebSocket session from reconnectAndSignMobile
+        // (no QR needed — phone gets a popup to approve)
+        console.log('[Anchoring] Mobile: signing blob via signMessageMobile...');
+        const blobSign = await signMessageMobile(blob);
+        console.log('[Anchoring] Mobile blob signed, submitting to blockchain...');
+        txHash = await submitSignedTransaction(blob, blobSign.signData, blobSign.publicKey || signerPublicKey, blobHash, session.walletAddress);
+        console.log('[Anchoring] Transaction submitted, txHash:', txHash);
       } else {
-        // Extension: build-blob -> sign blob via extension -> submit-signed
-        console.log('[Anchoring] Building transaction blob...');
-        const { transactionBlob: blob, hash: blobHash } = await buildTransactionBlob(session.walletAddress, anchorInput);
-        console.log('[Anchoring] Blob built (length:', blob.length, '), blob preview:', blob.slice(0, 40) + '...');
-        // Delay to let the extension reset after the first signMessage call
+        // Extension: delay to let the extension reset after the first signMessage call
         console.log('[Anchoring] Waiting 5s for extension to reset before second signMessage...');
-        await new Promise(r => setTimeout(r, 5_000));
+        await new Promise(r => setTimeout(r, 3_000));
         console.log('[Anchoring] Requesting extension to sign blob via signMessage...');
         const blobSign = await signMessageExtension(blob);
         console.log('[Anchoring] Blob signed, submitting to blockchain...');
@@ -143,6 +152,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       // Auto-advance after brief delay
       setTimeout(() => nextStep(), 1500);
     } catch (err) {
+      setMobileQrData('');
       console.error('[Anchoring] Failed at sub-step:', subStep, err);
       const message = err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
       trackAnchoringError(subStep, message || 'Unknown error');
@@ -187,6 +197,22 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
             </div>
           ))}
         </div>
+
+        {/* Mobile QR for signing during anchoring */}
+        {mobileQrData && subStep === 'signing' && (
+          <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/30 p-4">
+            <div className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-primary" />
+              <p className="text-sm font-medium">Approve on your Zetrix App</p>
+            </div>
+            <p className="text-xs text-muted-foreground text-center max-w-[280px]">
+              Scan this QR code to reconnect your wallet, then approve the signing request on your phone.
+            </p>
+            <div className="rounded-xl border bg-white p-3">
+              <QRCodeSVG value={mobileQrData} size={180} level="M" />
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="space-y-2">

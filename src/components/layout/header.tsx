@@ -22,9 +22,13 @@ export function Header() {
           <span className="text-xl font-bold text-primary">Zetrix Sign</span>
         </Link>
         <nav className="flex items-center gap-4">
-          <Link href="/sign" onClick={() => trackNavClick('sign')}>
+          <a href="/sign" onClick={(e) => {
+            e.preventDefault();
+            trackNavClick('sign');
+            window.location.href = '/sign';
+          }}>
             <Button variant="default" size="sm">Sign Document</Button>
-          </Link>
+          </a>
           <a href="/verify" onClick={handleVerifyClick}>
             <Button variant="outline" size="sm">Verify</Button>
           </a>
