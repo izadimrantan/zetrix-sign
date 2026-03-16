@@ -1,6 +1,7 @@
 'use client';
 
-import { Monitor, Smartphone } from 'lucide-react';
+import { useState } from 'react';
+import { Monitor, Smartphone, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ExtensionConnect } from './extension-connect';
 import { MobileConnect } from './mobile-connect';
@@ -13,6 +14,11 @@ interface Props {
 
 export function WalletConnector({ onConnected }: Props) {
   const extensionDetected = isExtensionAvailable();
+  const [expanded, setExpanded] = useState<'extension' | 'mobile' | null>(null);
+
+  const toggleExpand = (option: 'extension' | 'mobile') => {
+    setExpanded(prev => prev === option ? null : option);
+  };
 
   return (
     <div className="space-y-1">
@@ -21,12 +27,22 @@ export function WalletConnector({ onConnected }: Props) {
         Connect Your Wallet
       </h3>
       <p className="text-sm font-light text-[var(--zetrix-text-muted)]">
-        Connect your Zetrix Wallet to authenticate and sign the document. Choose your preferred connection method.
+        Connect your Zetrix Wallet to authenticate and sign the document. Select an option below.
       </p>
 
       {/* Browser Extension Option */}
-      <div className="mt-5 rounded-xl border border-[var(--zetrix-border)] bg-white p-5 transition-all hover:border-primary/20 hover:shadow-sm">
-        <div className="flex items-start gap-4">
+      <div
+        className={`mt-5 rounded-xl border bg-white transition-all ${
+          expanded === 'extension'
+            ? 'border-primary/30 shadow-sm'
+            : 'border-[var(--zetrix-border)] hover:border-primary/20 hover:shadow-sm'
+        }`}
+      >
+        <button
+          type="button"
+          className="flex w-full items-start gap-4 p-5 text-left"
+          onClick={() => toggleExpand('extension')}
+        >
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/[0.08]">
             <Monitor className="h-5 w-5 text-primary" />
           </div>
@@ -44,7 +60,20 @@ export function WalletConnector({ onConnected }: Props) {
             <p className="mt-0.5 text-sm font-light text-[var(--zetrix-text-muted)]">
               Connect using the Zetrix Wallet Chrome extension.
             </p>
-            <div className="mt-3">
+          </div>
+          <ChevronDown
+            className={`mt-1 h-5 w-5 shrink-0 text-[var(--zetrix-text-muted)] transition-transform duration-200 ${
+              expanded === 'extension' ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+        <div
+          className={`grid transition-all duration-200 ease-in-out ${
+            expanded === 'extension' ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="px-5 pb-5 pl-20">
               <ExtensionConnect onConnected={onConnected} inline />
             </div>
           </div>
@@ -59,8 +88,18 @@ export function WalletConnector({ onConnected }: Props) {
       </div>
 
       {/* Mobile Wallet Option */}
-      <div className="rounded-xl border border-[var(--zetrix-border)] bg-white p-5 transition-all hover:border-primary/20 hover:shadow-sm">
-        <div className="flex items-start gap-4">
+      <div
+        className={`rounded-xl border bg-white transition-all ${
+          expanded === 'mobile'
+            ? 'border-primary/30 shadow-sm'
+            : 'border-[var(--zetrix-border)] hover:border-primary/20 hover:shadow-sm'
+        }`}
+      >
+        <button
+          type="button"
+          className="flex w-full items-start gap-4 p-5 text-left"
+          onClick={() => toggleExpand('mobile')}
+        >
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/[0.08]">
             <Smartphone className="h-5 w-5 text-primary" />
           </div>
@@ -76,7 +115,20 @@ export function WalletConnector({ onConnected }: Props) {
             <p className="mt-0.5 text-sm font-light text-[var(--zetrix-text-muted)]">
               Scan a QR code with the Zetrix mobile app to connect.
             </p>
-            <div className="mt-3">
+          </div>
+          <ChevronDown
+            className={`mt-1 h-5 w-5 shrink-0 text-[var(--zetrix-text-muted)] transition-transform duration-200 ${
+              expanded === 'mobile' ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+        <div
+          className={`grid transition-all duration-200 ease-in-out ${
+            expanded === 'mobile' ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="px-5 pb-5 pl-20">
               <MobileConnect onConnected={onConnected} inline />
             </div>
           </div>

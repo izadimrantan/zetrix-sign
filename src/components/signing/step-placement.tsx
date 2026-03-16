@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PdfViewer } from '@/components/pdf/pdf-viewer';
@@ -16,20 +16,40 @@ interface StepProps {
   prevStep: () => void;
 }
 
-const PDF_WIDTH = 600;
-const PDF_HEIGHT = 800; // Approximate, will adjust
+const PDF_BASE_WIDTH = 600;
 
 export function StepPlacement({ session, updateSession, nextStep, prevStep }: StepProps) {
   const [currentPage, setCurrentPage] = useState(session.signaturePosition?.page ?? 0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pdfWidth, setPdfWidth] = useState(PDF_BASE_WIDTH);
+  const [pdfHeight, setPdfHeight] = useState(800); // Will be updated by actual render
 
   useEffect(() => {
     toast.info('Drag the signature box to reposition it on the document.', { duration: 4000 });
+  }, []);
+
+  // Measure container width and scale PDF to fit on mobile
+  useEffect(() => {
+    const measure = () => {
+      if (containerRef.current) {
+        const available = containerRef.current.clientWidth;
+        setPdfWidth(Math.min(PDF_BASE_WIDTH, available));
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
   }, []);
 
   const handlePositionChange = (position: SignaturePosition) => {
     updateSession({ signaturePosition: position });
     trackSignatureMoved();
   };
+
+  // Called by PdfViewer after the page canvas renders, giving us the real height
+  const handlePageRendered = useCallback((height: number) => {
+    setPdfHeight(height);
+  }, []);
 
   return (
     <div style={{ animation: 'fadeUp 0.4s ease both' }}>
@@ -44,20 +64,21 @@ export function StepPlacement({ session, updateSession, nextStep, prevStep }: St
         </p>
 
         {session.pdfFile && (
-          <div className="flex justify-center">
+          <div ref={containerRef} className="flex justify-center">
             <PdfViewer
               file={session.pdfFile}
               pageCount={session.pdfPageCount}
               currentPage={currentPage}
               onPageChange={setCurrentPage}
-              width={PDF_WIDTH}
+              onPageRendered={handlePageRendered}
+              width={pdfWidth}
             >
               <SignatureOverlay
                 signatureImage={session.signatureImage}
                 position={session.signaturePosition}
                 onPositionChange={handlePositionChange}
-                containerWidth={PDF_WIDTH}
-                containerHeight={PDF_HEIGHT}
+                containerWidth={pdfWidth}
+                containerHeight={pdfHeight}
                 currentPage={currentPage}
               />
             </PdfViewer>
