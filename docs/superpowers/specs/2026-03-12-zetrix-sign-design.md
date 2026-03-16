@@ -2,7 +2,7 @@
 
 **Product:** Zetrix Sign (Chain-Sign-Ease)
 **Date:** 2026-03-12
-**Status:** Approved — Updated 2026-03-15
+**Status:** Approved — Updated 2026-03-16
 **Author:** Claude Opus 4.6 with @izadi
 
 ---
@@ -162,11 +162,11 @@ The `/sign` page contains a multi-step stepper. All state is managed by a custom
 2. Call `window.zetrix.authorize({ method: "changeAccounts" })` to get address
 3. Call `window.zetrix.authorize({ method: "sendRandom", param: { random: "zetrix-sign-auth" } })` inside callback to get publicKey + signData
 **Mobile QR flow:**
-1. Initialize zetrix-connect-wallet-sdk with bridge URL
-2. Call `sdk.connect()` — displays QR code
-3. User scans with Zetrix mobile app
-4. Returns address (note: `publicKey` may not be returned by `connect()`)
-5. Call `sdk.auth()` to obtain publicKey if not returned by `connect()`
+1. Initialize `zetrix-connect-wallet-sdk` with bridge URL (`wss://wscw.zetrix.com`) and `customQrUi: true` + `qrDataCallback` for custom QR rendering
+2. Call `sdk.connect()` — establishes WebSocket to bridge (resolves immediately, no QR yet)
+3. Call `sdk.auth()` — sends `H5_bind` request, generates QR code via `qrDataCallback`. User scans with Zetrix mobile app. Returns `{ address }` (note: `publicKey` is NOT returned by `auth()` — it comes later from `signMessage()` during anchoring)
+4. The WebSocket session between browser ↔ bridge ↔ phone is now established but will expire if idle for several minutes (relevant for Step 6 — see "Mobile Wallet Re-authentication")
+**Important:** The bridge server (`wss://wscw.zetrix.com`) is a relay only — it does not interact with the blockchain. The mobile wallet app only connects to the mainnet bridge regardless of which chain is used for transactions. The SDK's `testnet` flag only controls deeplink URL schemes (`zetrixnew://` vs `zetrixnew-uat://`), not bridge selection.
 **Output:** walletAddress, publicKey, signerName, signerDID, credentialID stored in session state. Both wallet credentials and identity are required for later steps (signing and anchoring).
 **Identity (current implementation):** Display hardcoded dummy VC data as a credential card.
 **Dummy data:**
@@ -227,24 +227,41 @@ Credential ID: vc_test_credential_001
    - **CRITICAL:** The hash is computed on the PDF with signature but WITHOUT blockchain metadata. This is the version the user downloads. No metadata is embedded into the PDF after hashing to avoid the hash-metadata paradox (adding metadata would change the PDF bytes, making the on-chain hash not match the downloaded file).
 3. Wallet signs the document hash:
    - Extension: `window.zetrix.signMessage({ message: documentHash })`
-   - Mobile: `sdk.signMessage({ message: documentHash })`
+   - Mobile: **Requires a fresh QR scan** (see "Mobile Wallet Re-authentication" below)
    - Returns: digitalSignature, publicKey
-4. Build transaction blob and sign:
-   - Extension flow:
-     1. Call `POST /api/contract/build-blob` to build transaction blob server-side (proxies to microservice at `/ztx/contract/generate-blob`)
-     2. **Wait 5 seconds** for extension to reset after first `signMessage` call (Chrome extension message channel limitation)
-     3. Sign the blob via `window.zetrix.signMessage({ message: blob })` — note: uses `signMessage`, NOT `signBlob` (the extension's `signBlob` rejects valid hex blobs with "Invalid Blob string")
-     4. Submit signed blob via `POST /api/contract/submit-signed` (proxies to microservice at `/ztx/contract/submit` with body: `{ txInitiator, blob, listSigner: [{ signBlob: signData, publicKey }], hash }`)
-   - Mobile SDK: `sdk.sendTransaction({ from, to: contractAddress, nonce, amount: "0", gasFee: "0.01", data: JSON.stringify({ method: "anchorDocument", params: { documentHash, digitalSignature, signerPublicKey, credentialID } }), chainId: "2" })`
+4. Build transaction blob (same for both extension and mobile):
+   - Call `POST /api/contract/build-blob` to build transaction blob server-side (proxies to microservice at `/ztx/contract/generate-blob`)
+   - Returns: `{ transactionBlob, hash }`
+5. Sign the transaction blob:
+   - Extension: **Wait 3 seconds** for extension to reset after first `signMessage` call (Chrome extension message channel limitation), then sign via `window.zetrix.signMessage({ message: blob })`
+   - Mobile: `sdk.signMessage({ message: blob })` — uses the same WebSocket session from sub-step 3, phone receives a popup to approve (no second QR needed)
+6. Submit signed transaction:
+   - `POST /api/contract/submit-signed` (proxies to microservice at `/ztx/contract/submit` with body: `{ txInitiator, blob, listSigner: [{ signBlob: signData, publicKey }], hash }`)
    - Returns: txHash
-5. Store blockchain proof in session state (NOT embedded in PDF):
+7. Store blockchain proof in session state (NOT embedded in PDF):
    - documentHash, txHash, signerName, walletAddress, timestamp
    - These are displayed on the completion page
    - The downloadable PDF = the exact bytes that were hashed in step 2
 
+**Mobile Wallet Re-authentication (Why a New QR Code Appears at Step 6):**
+
+When using the mobile wallet, the user first connects and authenticates at Step 2 via the `zetrix-connect-wallet-sdk`. This establishes a WebSocket session between the browser and the Zetrix mobile app, relayed through a bridge server (`wss://wscw.zetrix.com`). However, by the time the user reaches Step 6 (after going through Steps 3-5 for signature creation, placement, and review), **the WebSocket session has expired**. The bridge server closes idle connections, and the mobile app may have gone to background.
+
+Because of this session expiry, the mobile wallet flow at Step 6 uses `reconnectAndSignMobile()` which performs:
+1. **Create a fresh SDK instance** — disconnects any stale previous connection
+2. **`sdk.connect()`** — establishes a new WebSocket to the bridge
+3. **`sdk.auth()`** — generates an `H5_bind` QR code. The user scans this QR with the Zetrix mobile app to re-establish the pairing.
+4. **`sdk.signMessage({ message: documentHash })`** — immediately after auth succeeds, the hash signing request is sent over the same fresh WebSocket. The phone receives a popup notification to approve the signing (no second QR needed).
+
+After the hash is signed, the transaction blob is built server-side and then signed via another `sdk.signMessage()` call on the same session. The phone receives a second popup to approve the blob signing.
+
+**Why not use `authAndSignMessage()`?** The SDK provides a combined `authAndSignMessage()` method that generates an `H5_bindAndSignMessage` QR type. However, some versions of the Zetrix mobile app do not recognize this QR type and display "Invalid QR Code". The two-step approach (`auth()` + `signMessage()`) uses the well-supported `H5_bind` QR type instead.
+
+**Why not use `sdk.sendTransaction()` for mobile?** The SDK's `sendTransaction()` sends a request over the WebSocket expecting the phone to show a transaction approval dialog. However, in QR mode (desktop browser), the SDK does not generate a deeplink notification to bring the phone app back to the foreground. If the app went to background after the signing step, the `sendTransaction` request goes unnoticed and hangs indefinitely. Instead, we build the transaction blob server-side, sign it via `signMessage()` (which reliably prompts the phone), and submit the signed blob directly to the blockchain node.
+
 **Known Extension Quirks:**
 - `window.zetrix.signBlob()` rejects valid transaction blobs with "Invalid Blob string" — use `signMessage` instead
-- Consecutive `signMessage` calls fail silently (callback never fires) due to Chrome extension message channel limitations — a 5-second delay between calls is required
+- Consecutive `signMessage` calls fail silently (callback never fires) due to Chrome extension message channel limitations — a 3-second delay between calls is required
 
 **Hash-Metadata Integrity Design:**
 The downloaded PDF does NOT contain embedded blockchain metadata (txHash, etc.). This ensures that:
@@ -252,7 +269,7 @@ The downloaded PDF does NOT contain embedded blockchain metadata (txHash, etc.).
 - Verification: user uploads the PDF → system computes hash → compares with blockchain → match
 - Blockchain proof details (txHash, signer, timestamp) are displayed on the completion page and are retrievable by querying the smart contract with the documentHash
 
-**UI:** Progress indicator showing each sub-step with status icons. Animated loading states. Error handling with retry for each sub-step.
+**UI:** Progress indicator showing each sub-step with status icons. Animated loading states. For mobile wallet users, a QR code panel appears during sub-step 3 with instructions to scan and approve. Error handling with retry for each sub-step.
 
 ### Step 7: Completion
 
@@ -376,31 +393,13 @@ const response = await fetch(
 );
 ```
 
-### 6.3 Transaction Submission (Client-Side via Wallet)
+### 6.3 Transaction Submission (Unified Build-Sign-Submit Flow)
 
-Transactions MUST be submitted by the user's wallet because the smart contract verifies `Chain.msg.sender === toAddress(signerPublicKey)`.
+Both extension and mobile wallet use the same server-assisted transaction flow. The transaction blob is built server-side, signed by the user's wallet (via `signMessage`), and submitted through the microservice. This unified approach avoids the mobile SDK's `sendTransaction()` which is unreliable in QR mode (see Step 6 documentation for details).
 
-**Data format chain:** The wallet SDK's `sendTransaction` `data` field is a JSON string with `{ method, params }` shape. The Zetrix blockchain passes this as the `input_str` argument to the contract's `main(input_str)` function, which parses it via `JSON.parse(input_str)` to extract `method` and `params`.
+Transactions MUST be signed by the user's wallet because the smart contract verifies `Chain.msg.sender === toAddress(signerPublicKey)`.
 
-**Mobile SDK:**
-```typescript
-const nonce = await sdk.getNonce({ address: walletAddress, chainId: "2" });
-await sdk.sendTransaction({
-  from: walletAddress,
-  to: contractAddress,
-  nonce: nonce + 1,
-  amount: "0",
-  gasFee: "0.01", // Testnet placeholder — may need adjustment
-  data: JSON.stringify({
-    method: "anchorDocument",
-    params: { documentHash, digitalSignature, signerPublicKey, credentialID }
-  }),
-  chainId: "2"
-});
-```
-
-**Browser Extension — Transaction via Microservice Proxy:**
-The browser extension does not have a direct `sendTransaction` method. Instead, we use a server-assisted flow that proxies through a microservice:
+**Flow (same for extension and mobile):**
 
 1. Client calls `POST /api/contract/build-blob` with transaction parameters
 2. API route proxies to microservice `POST {MICROSERVICE_BASE_URL}/ztx/contract/generate-blob`:
@@ -414,11 +413,12 @@ The browser extension does not have a direct `sendTransaction` method. Instead, 
    }
    // Returns: { blob, hash }
    ```
-3. **Wait 5 seconds** for extension reset (Chrome message channel limitation)
-4. Client signs the blob via `window.zetrix.signMessage({ message: blob })` (NOT `signBlob`)
+3. Client signs the blob:
+   - Extension: **Wait 3 seconds** for extension reset (Chrome message channel limitation), then `window.zetrix.signMessage({ message: blob })`
+   - Mobile: `sdk.signMessage({ message: blob })` — uses the WebSocket session established during hash signing (phone gets a popup)
    - Returns: `{ signData, publicKey }`
-5. Client submits signed blob via `POST /api/contract/submit-signed`
-6. API route proxies to microservice `POST {MICROSERVICE_BASE_URL}/ztx/contract/submit`:
+4. Client submits signed blob via `POST /api/contract/submit-signed`
+5. API route proxies to microservice `POST {MICROSERVICE_BASE_URL}/ztx/contract/submit`:
    ```typescript
    // Request body sent to microservice:
    {
@@ -428,9 +428,9 @@ The browser extension does not have a direct `sendTransaction` method. Instead, 
      hash
    }
    ```
-7. Returns: txHash
+6. Returns: txHash
 
-**Additional API routes needed for extension flow:**
+**API routes for transaction flow:**
 | Route | Purpose |
 |-------|---------|
 | `POST /api/contract/build-blob` | Build transaction blob server-side |
@@ -547,7 +547,7 @@ Errors displayed via shadcn/ui toast notifications.
 ```env
 # Zetrix Blockchain
 NEXT_PUBLIC_ZETRIX_CONTRACT_ADDRESS=ZTX3S4ntGLTJw9vVNpCX6Ash6wZhaLLV9BS5S
-NEXT_PUBLIC_ZETRIX_BRIDGE=wss://test-wscw.zetrix.com
+NEXT_PUBLIC_ZETRIX_BRIDGE=wss://wscw.zetrix.com       # Must be mainnet bridge — mobile app only connects here
 NEXT_PUBLIC_ZETRIX_TESTNET=true
 NEXT_PUBLIC_ZETRIX_CHAIN_ID=2
 NEXT_PUBLIC_ZETRIX_EXPLORER_URL=https://explorer.testnet.zetrix.com

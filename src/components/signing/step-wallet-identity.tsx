@@ -19,7 +19,8 @@ interface StepProps {
 }
 
 export function StepWalletIdentity({ session, updateSession, nextStep, prevStep }: StepProps) {
-  const isConnected = !!session.walletAddress && !!session.publicKey;
+  // Mobile auth returns address but not publicKey (publicKey comes from signMessage later)
+  const isConnected = !!session.walletAddress;
   const isConfirmed = !!session.credentialID;
   const vc = getDummyCredential();
 

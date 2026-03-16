@@ -115,72 +115,235 @@ export function signBlobExtension(blob: string): Promise<WalletSignResult> {
 // Mobile SDK (zetrix-connect-wallet-sdk)
 // ============================================
 
-async function getSDK(qrDataCallback?: (qrContent: string) => void): Promise<any> {
+// The bridge is a relay server for QR-based mobile wallet pairing.
+// It does NOT interact with the blockchain, so it can differ from the chain network.
+// The mobile wallet app only connects to the mainnet bridge, so we default to mainnet.
+const BRIDGE = process.env.NEXT_PUBLIC_ZETRIX_BRIDGE || 'wss://wscw.zetrix.com';
+// The SDK's testnet flag controls deeplink URL schemes (zetrixnew:// vs zetrixnew-uat://).
+// It should match the bridge/wallet app, NOT the blockchain network.
+const SDK_TESTNET = BRIDGE.includes('test-') ? true : false;
+
+/**
+ * Create a fresh SDK instance each time (do NOT cache).
+ * The SDK's WebSocket connection is tied to a single session,
+ * and reusing a stale instance causes silent failures.
+ */
+async function createSDK(qrDataCallback?: (qrContent: string, closeCb?: (data?: unknown) => void) => void): Promise<any> {
   if (typeof window === 'undefined') {
     throw new Error('SDK can only be used in the browser');
   }
 
-  if (!sdkInstance) {
-    const module = await import('zetrix-connect-wallet-sdk');
-    const ZetrixWalletConnect = module.default || module;
-
-    const options: Record<string, unknown> = {
-      bridge: process.env.NEXT_PUBLIC_ZETRIX_BRIDGE || 'wss://test-wscw.zetrix.com',
-      callMode: 'web',
-      qrcode: true,
-      appType: 'zetrix',
-      testnet: process.env.NEXT_PUBLIC_ZETRIX_TESTNET === 'true',
-    };
-
-    if (qrDataCallback) {
-      options.customQrUi = true;
-      options.qrDataCallback = qrDataCallback;
-    }
-
-    sdkInstance = new ZetrixWalletConnect(options);
+  // Disconnect any previous instance
+  if (sdkInstance) {
+    try { await (sdkInstance as any).disconnect(); } catch { /* ignore */ }
+    sdkInstance = null;
   }
 
-  return sdkInstance;
+  const module = await import('zetrix-connect-wallet-sdk');
+  const ZetrixWalletConnect = module.default || module;
+
+  const options: Record<string, unknown> = {
+    bridge: BRIDGE,
+    callMode: 'web',
+    qrcode: true,
+    appType: 'zetrix',
+    testnet: SDK_TESTNET,
+  };
+
+  if (qrDataCallback) {
+    options.customQrUi = true;
+    options.qrDataCallback = qrDataCallback;
+  }
+
+  const sdk = new ZetrixWalletConnect(options);
+  sdkInstance = sdk;
+  return sdk;
 }
 
+/**
+ * Mobile wallet connection flow (based on working reference implementation):
+ * 1. sdk.connect() — establishes WebSocket connection
+ * 2. sdk.auth() — generates H5_bind QR code, returns { address }
+ *    (this is the QR the user scans with the Zetrix mobile app)
+ * 3. Returns address + publicKey for use in signing steps
+ *
+ * The `qrDataCallback` receives the QR content string so the UI
+ * can render it with a custom QR component (QRCodeSVG).
+ */
 export async function connectMobile(
   qrDataCallback?: (qrContent: string) => void
 ): Promise<WalletConnectResult> {
-  const sdk = await getSDK(qrDataCallback);
-  const connectResult = await sdk.connect();
+  // Wrap the user's callback to also accept the SDK's close callback
+  // The SDK passes (qrContent, closeCallback) — we need to store the closeCallback
+  // so auth() can resolve via the QR path if h5Bind doesn't respond
+  let sdkCloseCallback: ((data?: unknown) => void) | null = null;
+  const wrappedCallback = qrDataCallback
+    ? (qrContent: string, closeCb?: (data?: unknown) => void) => {
+        console.log('[wallet-mobile] qrDataCallback received, content length:', qrContent.length);
+        if (closeCb) {
+          sdkCloseCallback = closeCb;
+        }
+        qrDataCallback(qrContent);
+      }
+    : undefined;
 
-  if (connectResult.code !== 0 || !connectResult.data?.address) {
-    throw new Error(connectResult.message || 'Mobile wallet connection failed');
+  const sdk = await createSDK(wrappedCallback);
+
+  // Step 1: sdk.connect() — establishes WebSocket and generates QR.
+  // The QR is delivered via qrDataCallback. The promise resolves
+  // once the user scans the QR with the mobile app.
+  console.log('[wallet-mobile] Calling sdk.connect()...');
+  const connectResult = await Promise.race([
+    sdk.connect(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('QR code scan timed out. Please try again.')), 180_000)
+    ),
+  ]);
+  console.log('[wallet-mobile] sdk.connect() resolved:', JSON.stringify(connectResult));
+
+  // Step 2: sdk.auth() — sends H5_bind request over existing WebSocket.
+  // This prompts the mobile app to approve the binding (no second QR).
+  console.log('[wallet-mobile] Calling sdk.auth()...');
+  const authResult = await Promise.race([
+    sdk.auth(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Wallet auth timed out. Please try again.')), 60_000)
+    ),
+  ]);
+  console.log('[wallet-mobile] sdk.auth() resolved:', JSON.stringify(authResult));
+
+  if (!authResult || authResult.code !== 0) {
+    throw new Error(authResult?.message || 'Mobile wallet auth failed');
   }
 
-  let publicKey = connectResult.data.publicKey || '';
+  const address = authResult.data?.address;
+  const publicKey = authResult.data?.publicKey || '';
 
-  // If connect() didn't return publicKey, call auth() to get it
-  if (!publicKey) {
-    const authResult = await sdk.auth();
-    if (authResult.code !== 0 || !authResult.data?.publicKey) {
-      throw new Error('Failed to obtain public key from mobile wallet');
-    }
-    publicKey = authResult.data.publicKey;
+  if (!address) {
+    throw new Error('Mobile wallet did not return an address');
   }
+
+  console.log('[wallet-mobile] Auth successful, address:', address.slice(0, 10) + '...');
 
   return {
-    address: connectResult.data.address,
+    address,
     publicKey,
     connectionMethod: 'mobile',
   };
 }
 
+/**
+ * Sign a message using the mobile wallet.
+ * Uses the existing WebSocket connection — no second QR needed.
+ */
 export async function signMessageMobile(message: string): Promise<WalletSignResult> {
-  const sdk = await getSDK();
-  const result = await sdk.signMessage({ message });
-  if (result.code !== 0 || !result.data?.signData) {
-    throw new Error(result.message || 'Mobile signing failed');
+  if (!sdkInstance) {
+    throw new Error('Mobile wallet not connected. Please connect first.');
   }
+
+  console.log('[wallet-mobile] Calling sdk.signMessage(), message length:', message.length);
+
+  const result = await Promise.race([
+    (sdkInstance as any).signMessage({ message }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Mobile signing timed out. Please try again.')), 60_000)
+    ),
+  ]);
+
+  if (!result || result.code !== 0 || !result.data?.signData) {
+    throw new Error(result?.message || 'Mobile signing failed');
+  }
+
+  console.log('[wallet-mobile] signMessage successful');
+
   return {
     signData: result.data.signData,
     publicKey: result.data.publicKey || '',
   };
+}
+
+/**
+ * Fresh connect + auth + sign in two steps (single QR scan).
+ * Used during anchoring step because the WebSocket session from Step 2
+ * likely expired by the time the user reaches Step 6.
+ *
+ * Flow: connect() → auth() (user scans QR) → signMessage() (over same WebSocket, no second QR).
+ * We use auth() + signMessage() instead of authAndSignMessage() because
+ * some Zetrix app versions don't recognize the H5_bindAndSignMessage QR type.
+ */
+export async function reconnectAndSignMobile(
+  message: string,
+  qrDataCallback?: (qrContent: string) => void
+): Promise<{ address: string; signData: string; publicKey: string }> {
+  const wrappedCallback = qrDataCallback
+    ? (qrContent: string, _closeCb?: (data?: unknown) => void) => {
+        console.log('[wallet-mobile] reconnect qrDataCallback, content length:', qrContent.length);
+        qrDataCallback(qrContent);
+      }
+    : undefined;
+
+  const sdk = await createSDK(wrappedCallback);
+
+  // Step 1: Establish WebSocket
+  console.log('[wallet-mobile] Reconnecting...');
+  await sdk.connect();
+  console.log('[wallet-mobile] Reconnected, calling auth() (QR will appear)...');
+
+  // Step 2: Auth — generates H5_bind QR, user scans
+  const authResult = await Promise.race([
+    sdk.auth(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Mobile auth timed out. Please try again.')), 180_000)
+    ),
+  ]);
+
+  console.log('[wallet-mobile] auth() resolved:', JSON.stringify(authResult));
+
+  if (!authResult || authResult.code !== 0) {
+    throw new Error(authResult?.message || 'Mobile re-auth failed');
+  }
+
+  const address = authResult.data?.address || '';
+  // Clear QR after auth succeeds — signMessage uses the same WebSocket, no QR needed
+  if (qrDataCallback) qrDataCallback('');
+
+  // Step 3: Sign message over existing WebSocket (no QR, phone gets popup)
+  console.log('[wallet-mobile] Auth done, calling signMessage() over same session...');
+  const signResult = await Promise.race([
+    sdk.signMessage({ message }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Mobile signing timed out. Please try again.')), 120_000)
+    ),
+  ]);
+
+  console.log('[wallet-mobile] signMessage resolved:', JSON.stringify(signResult));
+
+  if (!signResult || signResult.code !== 0 || !signResult.data?.signData) {
+    throw new Error(signResult?.message || 'Mobile signing failed');
+  }
+
+  return {
+    address: address || signResult.data.address || '',
+    signData: signResult.data.signData,
+    publicKey: signResult.data.publicKey || '',
+  };
+}
+
+/**
+ * Get the current nonce for an address via the SDK.
+ * The SDK queries the chain's wallet API (test-wallet or wallet.zetrix.com).
+ */
+export async function getNonceMobile(address: string): Promise<number> {
+  if (!sdkInstance) {
+    throw new Error('Mobile wallet not connected. Please connect first.');
+  }
+
+  const chainId = process.env.NEXT_PUBLIC_ZETRIX_CHAIN_ID || '2';
+  console.log('[wallet-mobile] Getting nonce for', address, 'chainId:', chainId);
+  const result = await (sdkInstance as any).getNonce({ address, chainId });
+  const nonce = result?.data?.nonce ?? 0;
+  console.log('[wallet-mobile] Current nonce:', nonce);
+  return typeof nonce === 'string' ? parseInt(nonce, 10) : nonce;
 }
 
 export async function sendTransactionMobile(params: {
@@ -191,18 +354,25 @@ export async function sendTransactionMobile(params: {
   gasFee: string;
   data: string;
 }): Promise<string> {
-  const sdk = await getSDK();
+  if (!sdkInstance) {
+    throw new Error('Mobile wallet not connected. Please connect first.');
+  }
+
   const chainId = process.env.NEXT_PUBLIC_ZETRIX_CHAIN_ID || '2';
-  const result = await sdk.sendTransaction({ ...params, chainId });
-  if (result.code !== 0 || !result.data?.txHash) {
+  console.log('[wallet-mobile] sendTransaction with nonce:', params.nonce);
+  const result = await (sdkInstance as any).sendTransaction({ ...params, chainId });
+  if (result.code !== 0 || !result.data?.hash) {
     throw new Error(result.message || 'Transaction submission failed');
   }
-  return result.data.txHash;
+  return result.data.hash;
 }
 
 export async function signBlobMobile(blob: string): Promise<WalletSignResult> {
-  const sdk = await getSDK();
-  const result = await sdk.signBlob({ message: blob });
+  if (!sdkInstance) {
+    throw new Error('Mobile wallet not connected. Please connect first.');
+  }
+
+  const result = await (sdkInstance as any).signBlob({ message: blob });
   if (result.code !== 0 || !result.data?.signData) {
     throw new Error(result.message || 'Blob signing failed');
   }
