@@ -68,7 +68,9 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
   const Icon = display.icon;
 
   return (
-    <Card className={`border ${display.bgColor}`}>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className={`relative overflow-hidden border-[var(--zetrix-border)] shadow-sm border ${display.bgColor}`}>
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader className="text-center">
         <Icon className={`mx-auto h-12 w-12 ${display.iconColor}`} />
         <div className="flex items-center justify-center gap-2">
@@ -131,5 +133,6 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }

@@ -39,7 +39,9 @@ export function StepComplete({ session, resetSession, signedPdfBytesRef }: StepP
   }, [signedPdfBytesRef, session.pdfFile?.name]);
 
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader className="text-center">
         <CheckCircle className="mx-auto mb-2 h-16 w-16 text-green-500" />
         <CardTitle className="text-2xl">Document Signed Successfully!</CardTitle>
@@ -93,5 +95,6 @@ export function StepComplete({ session, resetSession, signedPdfBytesRef }: StepP
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

@@ -32,7 +32,9 @@ export function StepPlacement({ session, updateSession, nextStep, prevStep }: St
   };
 
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader>
         <CardTitle>Place Signature on Document</CardTitle>
       </CardHeader>
@@ -68,5 +70,6 @@ export function StepPlacement({ session, updateSession, nextStep, prevStep }: St
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

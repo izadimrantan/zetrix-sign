@@ -6,7 +6,11 @@ import { Footer } from '@/components/layout/footer';
 import { Toaster } from 'sonner';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  weight: ['300', '400', '500', '600', '700', '800'],
+});
 
 export const metadata: Metadata = {
   title: 'Zetrix Sign — Blockchain-Verified Document Signing',
@@ -18,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${inter.variable} font-sans flex min-h-screen flex-col`}>
         <Header />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 pt-16">{children}</main>
         <Footer />
         <Toaster position="top-right" />
         <GoogleAnalytics />
