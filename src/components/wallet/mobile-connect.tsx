@@ -103,6 +103,12 @@ export function MobileConnect({ onConnected }: Props) {
           <QRCodeSVG value={qrData} size={220} level="M" />
         </div>
       )}
+      {/* Debug: show raw QR data like reference implementation */}
+      {qrData && (
+        <p className="max-w-[300px] break-all text-center text-[10px] text-muted-foreground/50">
+          {qrData}
+        </p>
+      )}
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         <p className="text-xs">Waiting for wallet response...</p>

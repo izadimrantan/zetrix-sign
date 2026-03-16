@@ -124,7 +124,7 @@ const BRIDGE = process.env.NEXT_PUBLIC_ZETRIX_BRIDGE || DEFAULT_BRIDGE;
  * The SDK's WebSocket connection is tied to a single session,
  * and reusing a stale instance causes silent failures.
  */
-async function createSDK(qrDataCallback?: (qrContent: string) => void): Promise<any> {
+async function createSDK(qrDataCallback?: (qrContent: string, closeCb?: (data?: unknown) => void) => void): Promise<any> {
   if (typeof window === 'undefined') {
     throw new Error('SDK can only be used in the browser');
   }
@@ -169,7 +169,21 @@ async function createSDK(qrDataCallback?: (qrContent: string) => void): Promise<
 export async function connectMobile(
   qrDataCallback?: (qrContent: string) => void
 ): Promise<WalletConnectResult> {
-  const sdk = await createSDK(qrDataCallback);
+  // Wrap the user's callback to also accept the SDK's close callback
+  // The SDK passes (qrContent, closeCallback) — we need to store the closeCallback
+  // so auth() can resolve via the QR path if h5Bind doesn't respond
+  let sdkCloseCallback: ((data?: unknown) => void) | null = null;
+  const wrappedCallback = qrDataCallback
+    ? (qrContent: string, closeCb?: (data?: unknown) => void) => {
+        console.log('[wallet-mobile] qrDataCallback received, content length:', qrContent.length);
+        if (closeCb) {
+          sdkCloseCallback = closeCb;
+        }
+        qrDataCallback(qrContent);
+      }
+    : undefined;
+
+  const sdk = await createSDK(wrappedCallback);
 
   // Step 1: sdk.connect() — establishes WebSocket and generates QR.
   // The QR is delivered via qrDataCallback. The promise resolves
