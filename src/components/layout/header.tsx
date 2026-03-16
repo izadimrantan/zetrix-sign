@@ -6,6 +6,14 @@ import { Button } from '@/components/ui/button';
 import { trackNavClick } from '@/lib/analytics';
 
 export function Header() {
+  const handleVerifyClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    trackNavClick('verify');
+    // Use window.location to force a full page load, ensuring
+    // query params are cleared and verify page state resets
+    window.location.href = '/verify';
+  };
+
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
@@ -17,9 +25,9 @@ export function Header() {
           <Link href="/sign" onClick={() => trackNavClick('sign')}>
             <Button variant="default" size="sm">Sign Document</Button>
           </Link>
-          <Link href="/verify" onClick={() => trackNavClick('verify')}>
+          <a href="/verify" onClick={handleVerifyClick}>
             <Button variant="outline" size="sm">Verify</Button>
-          </Link>
+          </a>
         </nav>
       </div>
     </header>

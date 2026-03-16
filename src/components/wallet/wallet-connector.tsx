@@ -2,6 +2,7 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ExtensionConnect } from './extension-connect';
+import { MobileConnect } from './mobile-connect';
 import type { WalletConnectResult } from '@/types/wallet';
 
 interface Props {
@@ -13,15 +14,13 @@ export function WalletConnector({ onConnected }: Props) {
     <Tabs defaultValue="extension">
       <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="extension">Browser Extension</TabsTrigger>
-        <TabsTrigger value="mobile" disabled className="opacity-50">
-          Mobile Wallet
-          <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            Coming soon
-          </span>
-        </TabsTrigger>
+        <TabsTrigger value="mobile">Mobile Wallet</TabsTrigger>
       </TabsList>
       <TabsContent value="extension">
         <ExtensionConnect onConnected={onConnected} />
+      </TabsContent>
+      <TabsContent value="mobile">
+        <MobileConnect onConnected={onConnected} />
       </TabsContent>
     </Tabs>
   );
