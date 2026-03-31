@@ -45,6 +45,10 @@ export interface SigningSession {
   digitalSignature: string;
   txHash: string;
 
+  // CMS/PKCS#7 signing (added in v2.0)
+  anchorVersion: string; // '1.0' (legacy) or '2.0' (CMS)
+  cmsSessionId: string; // Server-side CMS session ID
+
   // Meta
   currentStep: SigningStep;
   timestamp: string;
@@ -65,5 +69,7 @@ export interface SerializableSession {
   documentHash: string;
   digitalSignature: string;
   txHash: string;
+  anchorVersion: string;
+  cmsSessionId: string;
   timestamp: string;
 }

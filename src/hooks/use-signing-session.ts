@@ -20,6 +20,8 @@ const INITIAL_SESSION: SigningSession = {
   documentHash: '',
   digitalSignature: '',
   txHash: '',
+  anchorVersion: '2.0',
+  cmsSessionId: '',
   currentStep: SigningStep.Upload,
   timestamp: '',
 };
@@ -39,6 +41,8 @@ function toSerializable(session: SigningSession): SerializableSession {
     documentHash: session.documentHash,
     digitalSignature: session.digitalSignature,
     txHash: session.txHash,
+    anchorVersion: session.anchorVersion,
+    cmsSessionId: session.cmsSessionId,
     timestamp: session.timestamp,
   };
 }
@@ -65,6 +69,8 @@ export function useSigningSession() {
           documentHash: parsed.documentHash,
           digitalSignature: parsed.digitalSignature,
           txHash: parsed.txHash,
+          anchorVersion: parsed.anchorVersion || '2.0',
+          cmsSessionId: parsed.cmsSessionId || '',
           timestamp: parsed.timestamp,
           pdfFile: null, // File can't be serialized
           pdfPageCount: 0,
