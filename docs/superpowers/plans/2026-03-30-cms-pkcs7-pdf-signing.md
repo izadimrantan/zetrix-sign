@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-30
 **Spec:** `docs/superpowers/specs/2026-03-30-cms-pkcs7-pdf-signing-design.md`
-**Status:** Draft
+**Status:** Implementation Complete — Pending E2E Testing
 
 ---
 
@@ -540,12 +540,12 @@ export async function extractCmsInfo(pdfBytes: Uint8Array): Promise<{
 
 ## Execution Order
 
-| Order | Chunk | Tasks | Dependencies |
-|-------|-------|-------|--------------|
-| 1 | Foundation | Tasks 1-4 | None |
-| 2 | CMS Pipeline | Tasks 5-8 | Chunk 1 |
-| 3 | Integration | Tasks 9-12 | Chunk 2 |
-| 4 | Testing | Task 13 | Chunk 3 |
+| Order | Chunk | Tasks | Dependencies | Status |
+|-------|-------|-------|--------------|--------|
+| 1 | Foundation | Tasks 1-4 | None | COMPLETE |
+| 2 | CMS Pipeline | Tasks 5-8 | Chunk 1 | COMPLETE |
+| 3 | Integration | Tasks 9-12 | Chunk 2 | COMPLETE |
+| 4 | Testing | Task 13 | Chunk 3 | PARTIAL (unit tests done, E2E pending) |
 
 **Estimated complexity:** This is a significant feature addition. The CMS signer (Task 6) is the hardest component due to ASN.1 structure construction and wallet signature alignment.
 

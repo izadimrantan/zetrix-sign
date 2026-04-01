@@ -30,7 +30,7 @@
 | Contract TX Submission | Wallet SDK sendTransaction (user pays gas) | - |
 | CMS/PKCS#7 Signing | @signpdf/signpdf + pkijs + @peculiar/x509 (server-side) | latest |
 | XMP Metadata | Manual XML construction (server-side) | - |
-| Incremental PDF Update | muhammara or manual byte-level append (server-side) | latest |
+| Incremental PDF Update | Manual byte-level append (server-side, no native addons) | - |
 | Database | Prisma ORM + Neon Postgres (serverless) | latest |
 | Analytics | Google Analytics 4 (gtag.js) | GA4 |
 | Hosting | Vercel | - |
@@ -55,7 +55,11 @@ zetrix-sign-official/
     │   │   ├── sign/page.tsx      # Signing flow stepper (/sign)
     │   │   ├── verify/page.tsx    # Document verification (/verify)
     │   │   └── api/               # Next.js API routes
-    │   │       └── contract/      # Contract query endpoints
+    │   │       ├── contract/      # Contract query endpoints
+    │   │       └── signing/       # CMS signing API routes
+    │   │           ├── cms-sign/route.ts      # Phase 1: prep PDF + hash
+    │   │           ├── cms-complete/route.ts  # Phase 2: inject CMS sig
+    │   │           └── cms-anchor/route.ts    # Phase 3: anchor XMP
     │   ├── components/
     │   │   ├── ui/                # shadcn/ui components
     │   │   ├── signing/           # Signing flow step components
@@ -71,7 +75,15 @@ zetrix-sign-official/
     │   │   ├── blockchain.ts      # Contract interaction layer
     │   │   ├── vc.ts              # VC handling (dummy now, real later)
     │   │   ├── analytics.ts       # GA event tracking
-    │   │   └── db.ts              # Prisma client singleton
+    │   │   ├── db.ts              # Prisma client singleton
+    │   │   ├── signing-session-store.ts  # CMS session store (5-min TTL)
+    │   │   └── cms/               # CMS/PKCS#7 signing (server-side)
+    │   │       ├── x509-cert.ts       # X.509 v3 certificate generation
+    │   │       ├── cms-signer.ts      # CMS SignedData builder (pkijs)
+    │   │       ├── pdf-cms-sign.ts    # PDF placeholder + byte range hash
+    │   │       ├── xmp-metadata.ts    # XMP XML construction
+    │   │       ├── incremental-update.ts  # Byte-level incremental PDF update
+    │   │       └── detect-cms.ts      # CMS signature detection (verify)
     │   └── types/                 # TypeScript type definitions
     ├── prisma/
     │   ├── schema.prisma
@@ -146,7 +158,7 @@ The current signing flow produces PDFs with a visual signature image + blockchai
 - `POST /api/signing/cms-anchor` — Append blockchain proof XMP (incremental update)
 
 ### New Dependencies
-`@peculiar/x509`, `@signpdf/signpdf`, `@signpdf/placeholder-pdf-lib`, `pkijs`, `asn1js`, `muhammara`
+`@peculiar/x509`, `@signpdf/signpdf`, `@signpdf/placeholder-pdf-lib`, `pkijs`, `asn1js`
 
 ### Key Constraint
 The wallet only exposes `signMessage()` — it cannot produce X.509 certs or CMS structures. So the server constructs the CMS wrapper, but the wallet signs the actual document hash (wallet-delegated signing model).
@@ -276,4 +288,4 @@ The UI for the VC step should be designed to accommodate this transition — cur
 
 ---
 
-*Last updated: 2026-03-15*
+*Last updated: 2026-03-31*

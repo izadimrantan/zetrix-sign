@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle, XCircle, AlertTriangle, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, ExternalLink, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -8,10 +8,20 @@ import { truncateAddress, formatTimestamp } from '@/lib/utils';
 import { trackExplorerLinkClick } from '@/lib/analytics';
 import type { ValidationResult } from '@/types/contract';
 
+interface CmsInfo {
+  hasCmsSignature: boolean;
+  subFilter?: string;
+  signerName?: string;
+  reason?: string;
+  location?: string;
+  signatureStandard?: string;
+}
+
 interface Props {
   result: ValidationResult;
   documentHash: string;
   fileName: string;
+  cmsInfo?: CmsInfo;
 }
 
 function getResultDisplay(result: ValidationResult) {
@@ -63,7 +73,7 @@ function getResultDisplay(result: ValidationResult) {
   };
 }
 
-export function VerifyResult({ result, documentHash, fileName }: Props) {
+export function VerifyResult({ result, documentHash, fileName, cmsInfo }: Props) {
   const display = getResultDisplay(result);
   const Icon = display.icon;
 
@@ -126,6 +136,42 @@ export function VerifyResult({ result, documentHash, fileName }: Props) {
                     View on Zetrix Explorer
                     <ExternalLink className="h-3 w-3" />
                   </a>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* CMS/PKCS#7 Signature Info */}
+        {cmsInfo?.hasCmsSignature && (
+          <>
+            <Separator className="my-2" />
+            <div className="flex items-center gap-2 pt-1">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold text-[var(--zetrix-text)]">Digital Signature</span>
+              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-semibold hover:bg-primary/10">
+                CMS/PKCS#7
+              </Badge>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Standard</span>
+              <span>{cmsInfo.subFilter || 'adbe.pkcs7.detached'}</span>
+            </div>
+            {cmsInfo.signerName && (
+              <>
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Signed By</span>
+                  <span>{cmsInfo.signerName}</span>
+                </div>
+              </>
+            )}
+            {cmsInfo.location && (
+              <>
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Location</span>
+                  <span>{cmsInfo.location}</span>
                 </div>
               </>
             )}

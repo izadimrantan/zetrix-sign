@@ -16,6 +16,7 @@ function VerifyContent() {
   const [documentHash, setDocumentHash] = useState('');
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
+  const [cmsInfo, setCmsInfo] = useState<{ hasCmsSignature: boolean; subFilter?: string; signerName?: string; reason?: string; location?: string } | undefined>(undefined);
 
   const verifyHash = useCallback(async (hash: string, source: 'file_upload' | 'query_param' = 'file_upload') => {
     setIsLoading(true);
@@ -46,9 +47,10 @@ function VerifyContent() {
     }
   }, [searchParams, verifyHash]);
 
-  const handleHashComputed = (hash: string, name: string) => {
+  const handleHashComputed = (hash: string, name: string, cms?: { hasCmsSignature: boolean; subFilter?: string; signerName?: string; reason?: string; location?: string }) => {
     setDocumentHash(hash);
     setFileName(name);
+    setCmsInfo(cms);
     verifyHash(hash);
   };
 
@@ -58,6 +60,7 @@ function VerifyContent() {
     setDocumentHash('');
     setFileName('');
     setError('');
+    setCmsInfo(undefined);
   };
 
   return (
@@ -68,7 +71,7 @@ function VerifyContent() {
 
       {result && (
         <div className="space-y-4">
-          <VerifyResult result={result} documentHash={documentHash} fileName={fileName} />
+          <VerifyResult result={result} documentHash={documentHash} fileName={fileName} cmsInfo={cmsInfo} />
           <div className="text-center">
             <Button variant="outline" onClick={handleReset}>Verify Another Document</Button>
           </div>
