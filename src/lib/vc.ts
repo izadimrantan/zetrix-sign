@@ -1,23 +1,9 @@
 /**
- * Verifiable Credential shape.
- * FUTURE: Replace with real VC types from wallet SDK (sdk.getVP()).
+ * Verifiable Credential types are now defined in @/types/oid4vp.ts
+ * (VerifiedClaims, MyKadClaims, PassportClaims).
+ *
+ * Identity verification is handled via OID4VP with the MyID wallet.
+ * See: src/components/signing/identity-verifier.tsx
  */
-export interface VerifiableCredential {
-  name: string;
-  did: string;
-  issuer: string;
-  credentialID: string;
-}
 
-/**
- * Returns hardcoded dummy credential for development.
- * In production, this will be replaced by a wallet-prompted VC selection flow.
- */
-export function getDummyCredential(): VerifiableCredential {
-  return {
-    name: 'John Tan',
-    did: 'did:zetrix:test123',
-    issuer: 'ZCert Test Authority',
-    credentialID: 'vc_test_credential_001',
-  };
-}
+export type { VerifiedClaims, MyKadClaims, PassportClaims } from '@/types/oid4vp';

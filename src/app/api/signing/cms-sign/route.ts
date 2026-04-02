@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
       signerPublicKey,
       credentialId,
       credentialIssuer,
+      credentialType,
+      identityNumber,
     } = body;
 
     // Validate required fields
@@ -54,6 +56,8 @@ export async function POST(request: NextRequest) {
       signerPublicKey,
       credentialId: credentialId || '',
       credentialIssuer: credentialIssuer || '',
+      credentialType,
+      identityNumber,
     });
 
     // 3. Build VC XMP metadata

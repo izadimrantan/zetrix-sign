@@ -22,6 +22,8 @@ export interface CmsSignRequest {
   signerPublicKey: string; // Hex-encoded public key from wallet
   credentialId: string;
   credentialIssuer: string;
+  credentialType?: 'mykad' | 'passport';
+  identityNumber?: string; // IC number or passport number
 }
 
 export interface CmsSignResponse {
@@ -61,7 +63,8 @@ export interface CertGenerationParams {
   signerPublicKey: string; // Hex-encoded secp256k1 public key
   credentialId: string;
   credentialIssuer: string;
-  credentialType?: string;
+  credentialType?: 'mykad' | 'passport';
+  identityNumber?: string; // IC number or passport number
   vcVerifiedAt?: string; // ISO 8601
 }
 

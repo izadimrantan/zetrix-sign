@@ -128,7 +128,7 @@ const SDK_TESTNET = BRIDGE.includes('test-') ? true : false;
  * The SDK's WebSocket connection is tied to a single session,
  * and reusing a stale instance causes silent failures.
  */
-async function createSDK(qrDataCallback?: (qrContent: string, closeCb?: (data?: unknown) => void) => void): Promise<any> {
+async function createSDK(qrDataCallback?: (qrContent: string, closeCb?: (data?: unknown) => void) => void, appType: string = 'zetrix'): Promise<any> {
   if (typeof window === 'undefined') {
     throw new Error('SDK can only be used in the browser');
   }
@@ -146,7 +146,7 @@ async function createSDK(qrDataCallback?: (qrContent: string, closeCb?: (data?: 
     bridge: BRIDGE,
     callMode: 'web',
     qrcode: true,
-    appType: 'zetrix',
+    appType,
     testnet: SDK_TESTNET,
   };
 
@@ -379,6 +379,76 @@ export async function signBlobMobile(blob: string): Promise<WalletSignResult> {
   return {
     signData: result.data.signData,
     publicKey: result.data.publicKey || '',
+  };
+}
+
+/**
+ * Request a Verifiable Presentation from MyID via the SDK.
+ * Requires an active SDK session (connectMobile must have been called first).
+ *
+ * Uses appType: 'myid' — creates a fresh SDK instance connected to MyID.
+ * Flow: connect() → auth() (user scans QR) → getVP() (user approves disclosure on phone)
+ *
+ * Returns the VP uuid which can be sent to the verification endpoint.
+ */
+export async function getVPMobile(
+  templateId: string,
+  attributes: string[],
+  qrDataCallback?: (qrContent: string) => void
+): Promise<{ uuid: string; address: string; publicKey: string }> {
+  const wrappedCallback = qrDataCallback
+    ? (qrContent: string, _closeCb?: (data?: unknown) => void) => {
+        console.log('[wallet-mobile] getVP qrDataCallback, content length:', qrContent.length);
+        qrDataCallback(qrContent);
+      }
+    : undefined;
+
+  // Create SDK with appType 'myid' for MyID wallet
+  const sdk = await createSDK(wrappedCallback, 'myid');
+
+  // Step 1: Establish WebSocket
+  console.log('[wallet-mobile] getVP: connecting...');
+  await sdk.connect();
+
+  // Step 2: Auth — generates QR, user scans with MyID
+  console.log('[wallet-mobile] getVP: authenticating (QR will appear)...');
+  const authResult = await Promise.race([
+    sdk.auth(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('MyID auth timed out. Please try again.')), 180_000)
+    ),
+  ]);
+
+  if (!authResult || authResult.code !== 0) {
+    throw new Error(authResult?.message || 'MyID auth failed');
+  }
+
+  const address = authResult.data?.address || '';
+  const publicKey = authResult.data?.publicKey || '';
+  console.log('[wallet-mobile] getVP: auth done, address:', address.slice(0, 10) + '...');
+
+  // Clear QR after auth
+  if (qrDataCallback) qrDataCallback('');
+
+  // Step 3: Request VP — user approves disclosure on phone
+  console.log('[wallet-mobile] getVP: requesting VP with templateId:', templateId, 'attributes:', attributes);
+  const vpResult = await Promise.race([
+    sdk.getVP({ templateId, attributes }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('VP request timed out. Please try again.')), 120_000)
+    ),
+  ]);
+
+  console.log('[wallet-mobile] getVP result:', JSON.stringify(vpResult));
+
+  if (!vpResult || vpResult.code !== 0 || !vpResult.data?.uuid) {
+    throw new Error(vpResult?.message || 'Failed to get Verifiable Presentation');
+  }
+
+  return {
+    uuid: vpResult.data.uuid,
+    address,
+    publicKey,
   };
 }
 

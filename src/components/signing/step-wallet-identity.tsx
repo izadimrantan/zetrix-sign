@@ -1,14 +1,16 @@
 'use client';
 
-import { CheckCircle, ShieldCheck } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { WalletConnector } from '@/components/wallet/wallet-connector';
 import { truncateAddress } from '@/lib/utils';
-import { getDummyCredential } from '@/lib/vc';
-import type { SigningSession } from '@/types/signing';
+import { IdentityVerifier } from './identity-verifier';
+import { getSignerNameFromClaims } from '@/lib/oid4vp/claims';
 import { trackIdentityConfirmed } from '@/lib/analytics';
+import type { SigningSession } from '@/types/signing';
 import type { WalletConnectResult } from '@/types/wallet';
+import type { VerifiedClaims } from '@/types/oid4vp';
 
 interface StepProps {
   session: SigningSession;
@@ -18,10 +20,8 @@ interface StepProps {
 }
 
 export function StepWalletIdentity({ session, updateSession, nextStep, prevStep }: StepProps) {
-  // Mobile auth returns address but not publicKey (publicKey comes from signMessage later)
   const isConnected = !!session.walletAddress;
-  const isConfirmed = !!session.credentialID;
-  const vc = getDummyCredential();
+  const isVerified = !!session.credentialID;
 
   const handleConnected = (result: WalletConnectResult) => {
     updateSession({
@@ -31,13 +31,16 @@ export function StepWalletIdentity({ session, updateSession, nextStep, prevStep 
     });
   };
 
-  const handleConfirmIdentity = () => {
+  const handleVerified = (claims: VerifiedClaims, presentationId: string) => {
+    const signerName = getSignerNameFromClaims(claims);
     updateSession({
-      signerName: vc.name,
-      signerDID: vc.did,
-      credentialID: vc.credentialID,
+      signerName,
+      signerDID: `did:zetrix:${session.walletAddress}`,
+      credentialID: presentationId,
+      credentialType: claims.credentialType,
+      verifiedClaims: claims,
     });
-    trackIdentityConfirmed(vc.credentialID);
+    trackIdentityConfirmed(presentationId);
   };
 
   return (
@@ -61,46 +64,33 @@ export function StepWalletIdentity({ session, updateSession, nextStep, prevStep 
           <WalletConnector onConnected={handleConnected} />
         )}
 
-        {/* Identity Section — appears after wallet connects */}
-        {isConnected && (
+        {/* Identity Verification — appears after wallet connects */}
+        {isConnected && !isVerified && (
           <div className="rounded-lg border border-[var(--zetrix-border)] p-6">
-            <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[var(--zetrix-text-muted)]">Verifiable Credential</p>
-            <div className="mb-4 flex items-center gap-3">
-              <ShieldCheck className="h-8 w-8 text-primary" />
-              <div>
-                <h3 className="font-semibold">{vc.name}</h3>
-                <p className="text-sm text-muted-foreground">{vc.did}</p>
-              </div>
-            </div>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex items-baseline gap-3">
-                <span className="text-muted-foreground">Issuer</span>
-                <span>{vc.issuer}</span>
-              </div>
-              <div className="flex items-baseline gap-3">
-                <span className="text-muted-foreground">Credential ID</span>
-                <span className="font-mono">{vc.credentialID}</span>
-              </div>
-            </div>
+            <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[var(--zetrix-text-muted)]">
+              Identity Verification
+            </p>
+            <IdentityVerifier onVerified={handleVerified} />
+          </div>
+        )}
 
-            {!isConfirmed && (
-              <div className="mt-5 flex justify-start">
-                <Button onClick={handleConfirmIdentity}>Confirm Identity</Button>
-              </div>
-            )}
-
-            {isConfirmed && (
-              <div className="mt-5 flex items-center gap-2 rounded-md bg-green-50 border border-green-200 px-4 py-2.5">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-medium text-green-700">Identity Confirmed</span>
-              </div>
-            )}
+        {/* Verified Identity Display */}
+        {isConnected && isVerified && session.verifiedClaims && (
+          <div className="rounded-lg border border-[var(--zetrix-border)] p-6">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[var(--zetrix-text-muted)]">
+              Identity Verification
+            </p>
+            <IdentityVerifier
+              onVerified={handleVerified}
+              initialClaims={session.verifiedClaims}
+              initialPresentationId={session.credentialID}
+            />
           </div>
         )}
 
         <div className="flex justify-between">
           <Button variant="outline" onClick={prevStep}>Back</Button>
-          <Button onClick={nextStep} disabled={!isConnected || !isConfirmed}>Continue</Button>
+          <Button onClick={nextStep} disabled={!isConnected || !isVerified}>Continue</Button>
         </div>
       </CardContent>
     </Card>

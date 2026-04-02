@@ -16,7 +16,7 @@ const TEST_PARAMS: CertGenerationParams = {
   signerPublicKey: 'b00168abc123def456',
   credentialId: 'vc-id-001',
   credentialIssuer: 'did:zetrix:issuer001',
-  credentialType: 'ZetrixKYCCredential',
+  credentialType: 'mykad',
   vcVerifiedAt: '2026-03-31T00:00:00Z',
 };
 
