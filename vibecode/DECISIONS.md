@@ -9,6 +9,86 @@
 
 <!-- Newest decision at top -->
 
+### 2026-03-31 - CMS/PKCS#7 PDF Signing: Node.js Implementation
+
+**Context:** The engineer spec (`Zetrix Sign - CMS_PKCS#7 PDF signing.docx`) recommended Python (pyHanko + pikepdf) for standards-compliant PDF signing. Need to decide whether to follow the Python approach or implement in Node.js.
+
+**Options Considered:**
+| Option | Pros | Cons |
+|--------|------|------|
+| Python microservice (pyHanko) | Mature, battle-tested, pyHanko handles full pipeline | Separate service deployment, polyglot stack, additional infra |
+| Node.js (pkijs + @signpdf) | Unified stack (Next.js), single deployment, no new infra | Less mature ecosystem, more glue code, ~500-800 lines of CMS construction |
+| Hybrid (Python Lambda for signing only) | Best of both worlds | Lambda cold starts, still need Python deployment |
+
+**Decision:** Node.js implementation with `pkijs`, `@signpdf/signpdf`, `@peculiar/x509`
+
+**Rationale:** Keeps the entire stack unified in TypeScript/Node.js. Avoids deploying and maintaining a separate Python microservice. The trade-off is more glue code for CMS structure construction, but the core libraries (`pkijs` for CMS SignedData, `@peculiar/x509` for certificates) are well-maintained and correct. The `@signpdf` library handles PDF placeholder injection.
+
+**Decided By:** @izadi with AI input
+
+---
+
+### 2026-03-31 - CMS Key Type: ECDSA P-256 (not secp256k1 or Ed25519)
+
+**Context:** The Zetrix blockchain uses secp256k1 natively. The engineer spec suggested Ed25519. Need to decide which key type for the CMS signature.
+
+**Options Considered:**
+| Option | Pros | Cons |
+|--------|------|------|
+| secp256k1 + SHA-256 | Matches Zetrix native key | Node.js WebCrypto doesn't support secp256k1, pkijs may not either |
+| Ed25519 | Modern, fast | pkijs CMS SignedData doesn't support Ed25519 (one-shot algorithm) |
+| ECDSA P-256 + SHA-256 | Full WebCrypto/pkijs support, widely recognized by PDF readers | Doesn't match Zetrix native key type |
+
+**Decision:** ECDSA P-256 with SHA-256 for CMS signatures. Server generates an ephemeral P-256 keypair per signing session.
+
+**Rationale:** P-256 is the only ECDSA curve with full support across Node.js WebCrypto, pkijs CMS SignedData, and PDF readers. The CMS certificate wraps the signer's identity (from VCs) and is self-signed with the ephemeral key. The blockchain anchoring step still uses the wallet's native key (secp256k1) for on-chain proof.
+
+**Decided By:** @izadi with AI input
+
+---
+
+### 2026-03-31 - CMS Signing: Server-Side Ephemeral Key (Approach A)
+
+**Context:** The wallet only exposes `signMessage()` — it cannot produce X.509 certs or CMS structures. Need to decide who holds the signing key for the CMS signature.
+
+**Options Considered:**
+| Option | Pros | Cons |
+|--------|------|------|
+| A: Server ephemeral key | Simpler, full CMS control, works now | CMS signature proves "server on behalf of user", not "user directly" |
+| B: Wallet-delegated | CMS proves wallet owner signed | Wallet signMessage output format may not match CMS DER requirements |
+
+**Decision:** Approach A — server generates an ephemeral ECDSA P-256 keypair per session for CMS signing. The wallet still signs the blockchain transaction blob.
+
+**Rationale:** The wallet's `signMessage()` returns a signature in an unspecified format that may not be compatible with CMS's DER signature requirements. The server key approach works reliably. The security model is maintained because: (1) the CMS cert embeds the signer's wallet public key and VC identity, (2) the blockchain TX is still signed by the wallet, proving wallet ownership.
+
+**Decided By:** @izadi with AI input
+
+---
+
+### 2026-03-31 - Incremental PDF Update: Manual Byte-Level (no muhammara)
+
+**Context:** Post-CMS-signing blockchain anchor metadata must be appended via incremental PDF update (append after %%EOF) to avoid invalidating the CMS signature. Options are `muhammara` (native C++ addon) or manual byte-level construction.
+
+**Decision:** Manual byte-level incremental update (no native addon dependency)
+
+**Rationale:** `muhammara` requires a C++ build toolchain and may fail on Vercel serverless (which has limited native addon support). The manual approach constructs new PDF objects (XMP stream, updated catalog), a new xref table, and trailer, then appends them after the existing PDF content. This is ~150 lines of code and avoids all native dependency issues.
+
+**Decided By:** @izadi with AI input
+
+---
+
+### 2026-03-31 - PDF Now Processed Server-Side (Hybrid Model)
+
+**Context:** Previously, all PDF processing was client-side (privacy-preserving). CMS/PKCS#7 signing requires server-side libraries (pkijs, @peculiar/x509).
+
+**Decision:** Hybrid model — visual signature embedding remains client-side, CMS signing + XMP + incremental update happen server-side via API routes. Server processes PDF in memory only (never stored on disk).
+
+**Rationale:** CMS structure construction and X.509 certificate generation cannot run in the browser. The server receives the PDF with visual signature, applies CMS signature, and returns the signed PDF. The PDF is processed in-memory and immediately returned — no server-side storage. HTTPS ensures transit security.
+
+**Decided By:** @izadi with AI input
+
+---
+
 ### 2026-03-15 - Google Analytics Event Tracking
 
 **Context:** Need to track user behavior, funnel drop-offs, and feature usage across the signing and verification flows.

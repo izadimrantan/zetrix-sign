@@ -13,29 +13,110 @@
 
 ## Current Status
 
-**Last Updated:** 2026-03-15
+**Last Updated:** 2026-03-31
 **Updated By:** Claude Opus 4.6
 
 | Field | Value |
 |-------|-------|
-| Feature | Full Application (Signing + Verification + Analytics) |
-| Stage | Stage 12: Production Deployment |
-| Status | Deployed (Testnet) |
+| Feature | CMS/PKCS#7 PDF Signing Integration |
+| Stage | Stage 13: CMS/PKCS#7 Implementation |
+| Status | API Routes Complete — Pending End-to-End Testing |
 
 ### Next Steps
-1. Set up Google Analytics data stream with Vercel URL — Assigned to: @izadi
-2. Test mobile wallet connection flow — Assigned to: @izadi
-3. Implement real Verifiable Credential integration — Assigned to: AI + @izadi
-4. Custom domain setup on Vercel — Assigned to: @izadi
+1. End-to-end test CMS signing flow with browser extension — Assigned to: @izadi
+2. End-to-end test CMS signing flow with mobile wallet — Assigned to: @izadi
+3. Test signed PDF in Adobe Acrobat — verify signature panel appears — Assigned to: @izadi
+4. Confirm wallet signMessage output format works with CMS flow — Assigned to: @izadi
+5. Implement real Verifiable Credential integration — Assigned to: AI + @izadi
 
 ### Blockers
-- None
+- Wallet `signMessage()` output format needs verification against CMS expectations
+- In-memory session store won't work across Vercel serverless instances (need Redis/KV for production)
 
 ---
 
 ## Session History
 
 <!-- Newest session at top -->
+
+### 2026-03-31 - CMS/PKCS#7 PDF Signing Implementation (Tasks 8-12)
+
+**AI Model:** Claude Opus 4.6
+**Team Active:** Solo / @izadi
+
+**Completed:**
+- [x] Task 8: Created `POST /api/signing/cms-sign` — prepares PDF with XMP + placeholder, generates X.509 cert, returns hashToSign
+- [x] Task 8: Created `POST /api/signing/cms-complete` — builds CMS SignedData, injects into PDF placeholder, returns signed PDF
+- [x] Task 9: Created `src/lib/cms/incremental-update.ts` — manual byte-level incremental PDF update (no native addon)
+- [x] Task 10: Created `POST /api/signing/cms-anchor` — appends anchor XMP after %%EOF via incremental update
+- [x] Task 11: Updated `step-anchoring.tsx` — new sub-steps: cms-preparing, signing, cms-completing, anchoring, anchor-xmp, saving
+- [x] Task 12: Created `src/lib/cms/detect-cms.ts` — detects CMS signatures and extracts XMP anchor metadata from PDFs
+- [x] Task 12: Updated `verify-result.tsx` — shows CMS/PKCS#7 badge, signer name, location when CMS is detected
+- [x] Task 12: Updated `verify-upload.tsx` + `verify/page.tsx` — pipes CMS detection through to result display
+- [x] Updated `vibecode/PROJECT_CONTEXT.md` — added CMS architecture section, new API routes, new dependencies
+- [x] Updated `vibecode/DECISIONS.md` — 5 new decisions (Node.js stack, P-256 key, ephemeral server key, manual incremental, hybrid PDF model)
+- [x] All TypeScript type checks pass (`tsc --noEmit`)
+- [x] All Next.js builds pass (`npm run build`)
+
+**Note:** Tasks 1-7 (types, dependencies, X.509 cert, XMP builder, PDF placeholder, CMS signer, session store) were completed by a previous model on the `feature/cms-pkcs7-signing` branch.
+
+**Test Results:**
+| Stage | Status | Tested By | Notes |
+|-------|--------|-----------|-------|
+| CMS API routes (type check) | ✅ Pass | AI | `tsc --noEmit` clean |
+| CMS API routes (build) | ✅ Pass | AI | All 3 routes appear in build output |
+| Step anchoring UI (build) | ✅ Pass | AI | Component builds with new sub-steps |
+| Verify page CMS detection (build) | ✅ Pass | AI | CMS info pipes through correctly |
+| End-to-end CMS flow | ⏳ Untested | - | Needs real wallet testing |
+| Adobe Acrobat validation | ⏳ Untested | - | Needs manual test with signed PDF |
+
+**Decisions Made:**
+- Node.js CMS implementation (not Python) — See DECISIONS.md
+- ECDSA P-256 for CMS key (not secp256k1/Ed25519) — See DECISIONS.md
+- Server ephemeral key approach — See DECISIONS.md
+- Manual byte-level incremental update — See DECISIONS.md
+- Hybrid PDF model (client visual + server CMS) — See DECISIONS.md
+
+**Handoff Notes:**
+```
+CMS/PKCS#7 implementation is code-complete (Tasks 1-12). All builds pass.
+NOT YET TESTED end-to-end with real wallet — this is the critical next step.
+Key risk: wallet signMessage() output format may need adjustment for CMS.
+The in-memory session store (signing-session-store.ts) won't work across
+Vercel serverless instances — needs Redis/KV for production.
+Incremental PDF update uses manual byte-level approach (no native addons).
+```
+
+---
+
+### 2026-03-30 - CMS/PKCS#7 Foundation (Tasks 1-7)
+
+**AI Model:** Claude Opus 4.6 (different session)
+**Team Active:** Solo / @izadi
+
+**Completed:**
+- [x] Task 1: Created `src/types/cms.ts` — all CMS type definitions
+- [x] Task 2: Installed dependencies (@peculiar/x509, @signpdf/*, pkijs, asn1js)
+- [x] Task 3: Created `src/lib/cms/x509-cert.ts` — X.509 v3 cert generation with 12 unit tests
+- [x] Task 4: Created `src/lib/cms/xmp-metadata.ts` — XMP builder with 10+ unit tests
+- [x] Task 5: Created `src/lib/cms/pdf-cms-sign.ts` — PDF placeholder injection with 12+ unit tests
+- [x] Task 6: Created `src/lib/cms/cms-signer.ts` — CMS SignedData builder with 8+ unit tests
+- [x] Task 7: Created `src/lib/signing-session-store.ts` — in-memory session store with 7 unit tests
+- [x] Extended `src/types/signing.ts` with anchorVersion + cmsSessionId
+- [x] Extended `src/hooks/use-signing-session.ts` with CMS fields
+- [x] Created design spec: `docs/superpowers/specs/2026-03-30-cms-pkcs7-pdf-signing-design.md`
+- [x] Created implementation plan: `docs/superpowers/plans/2026-03-30-cms-pkcs7-pdf-signing.md`
+
+**Test Results:**
+| Stage | Status | Tested By | Notes |
+|-------|--------|-----------|-------|
+| X.509 cert generation | ✅ Pass | AI | 12 unit tests |
+| XMP metadata builder | ✅ Pass | AI | 10+ unit tests |
+| PDF placeholder injection | ✅ Pass | AI | 12+ unit tests |
+| CMS SignedData builder | ✅ Pass | AI | 8+ unit tests |
+| Session store | ✅ Pass | AI | 7 unit tests |
+
+---
 
 ### 2026-03-15 - Bug Fixes, Analytics, Database Migration & Deployment
 
@@ -156,6 +237,9 @@ VC presentation step uses hardcoded dummy data — real VC integration is a futu
 | 10 | Completion Page | ✅ | ✅ | ✅ |
 | 11 | Verification Page | ✅ | ✅ | ✅ |
 | 12 | Analytics, DB Migration & Deployment | ✅ | ✅ | ✅ |
+| 13 | CMS/PKCS#7 Foundation (Types, Cert, XMP, Signer) | ✅ | ✅ (unit) | ✅ |
+| 14 | CMS API Routes (cms-sign, cms-complete, cms-anchor) | ✅ | ⏳ (e2e) | 🔄 |
+| 15 | CMS UI Integration (step-anchoring, verify) | ✅ | ⏳ (e2e) | 🔄 |
 
 **Legend:** ✅ Complete | 🔄 In Progress | ⏳ Pending | ❌ Blocked
 
@@ -167,20 +251,26 @@ VC presentation step uses hardcoded dummy data — real VC integration is a futu
 
 ### Quick Context
 - **Project:** Zetrix Sign — blockchain-anchored PDF digital signing platform
-- **Current work:** Deployed on Vercel (testnet). GA tracking implemented.
-- **Last completed:** Full signing + verification flow, analytics, Neon Postgres migration, Vercel deployment
-- **Next:** GA data stream setup, mobile wallet testing, real VC integration
+- **Current work:** CMS/PKCS#7 signing implementation complete (code). Needs end-to-end testing.
+- **Last completed:** CMS API routes, incremental PDF update, UI integration, verification CMS detection
+- **Next:** E2E testing with real wallet, Adobe Acrobat validation, real VC integration
 
-### Files Recently Changed
-- `src/lib/analytics.ts` - New: centralized GA event tracking (30+ events)
-- `src/components/analytics/google-analytics.tsx` - GA4 script loader
-- `src/lib/db.ts` - Updated: Neon Postgres adapter
-- `prisma/schema.prisma` - Updated: PostgreSQL provider
-- `prisma.config.ts` - Updated: Neon connection config
-- `src/components/signing/*` - All step components updated with analytics
-- `src/components/verify/*` - Verification components updated with analytics
-- `src/app/api/contract/build-blob/route.ts` - Fixed microservice URL
-- `src/app/api/contract/submit-signed/route.ts` - Fixed URL + added txInitiator
+### Files Recently Changed (CMS/PKCS#7)
+- `src/lib/cms/x509-cert.ts` - X.509 v3 certificate generation (ECDSA P-256)
+- `src/lib/cms/cms-signer.ts` - CMS SignedData builder (pkijs)
+- `src/lib/cms/pdf-cms-sign.ts` - PDF placeholder injection + byte range hash
+- `src/lib/cms/xmp-metadata.ts` - XMP XML construction (VC + anchor)
+- `src/lib/cms/incremental-update.ts` - Manual byte-level incremental PDF update
+- `src/lib/cms/detect-cms.ts` - CMS signature detection for verification
+- `src/lib/signing-session-store.ts` - In-memory session store (5-min TTL)
+- `src/types/cms.ts` - CMS type definitions
+- `src/app/api/signing/cms-sign/route.ts` - Phase 1: prep PDF + return hash
+- `src/app/api/signing/cms-complete/route.ts` - Phase 2: inject CMS signature
+- `src/app/api/signing/cms-anchor/route.ts` - Phase 3: append anchor XMP
+- `src/components/signing/step-anchoring.tsx` - Updated with CMS sub-steps
+- `src/components/verify/verify-result.tsx` - CMS detection display
+- `src/components/verify/verify-upload.tsx` - CMS detection on upload
+- `src/app/verify/page.tsx` - CMS info piping
 
 ### Before You Start
 1. Read this Progress Log
