@@ -88,7 +88,10 @@ export async function generateSignerCertificate(
   const oneYearLater = new Date(now);
   oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
 
-  const subjectName = `CN=${signerName}, O=Zetrix AI Berhad, C=MY`;
+  // Include identity number (IC or passport) in the cert subject when available
+  const subjectName = params.identityNumber
+    ? `CN=${signerName}, SERIALNUMBER=${params.identityNumber}, O=Zetrix AI Berhad, C=MY`
+    : `CN=${signerName}, O=Zetrix AI Berhad, C=MY`;
 
   // Build extensions array
   const extensions: x509.Extension[] = [

@@ -14,7 +14,7 @@ const createMockProps = () => ({
     pdfFile: null,
     pdfPageCount: 0,
     walletAddress: '', publicKey: '', connectionMethod: '' as const,
-    signerName: '', signerDID: '', credentialID: '',
+    signerName: '', signerDID: '', credentialID: '', credentialType: '' as const, verifiedClaims: null,
     signatureType: '' as const, signatureImage: '',
     signaturePosition: null,
     documentHash: '', digitalSignature: '', txHash: '',

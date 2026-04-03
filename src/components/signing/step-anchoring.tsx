@@ -9,6 +9,7 @@ import { embedSignatureOnPdf } from '@/lib/pdf';
 import { signMessageExtension, signMessageMobile, reconnectAndSignMobile } from '@/lib/wallet';
 import { buildTransactionBlob, submitSignedTransaction } from '@/lib/blockchain';
 import { trackAnchoringStart, trackAnchoringSubStep, trackAnchoringSuccess, trackAnchoringError, trackAnchoringRetry } from '@/lib/analytics';
+import { getIdentifierFromClaims, getIssuerFromClaims } from '@/lib/oid4vp/claims';
 import type { SigningSession } from '@/types/signing';
 
 interface StepProps {
@@ -66,6 +67,14 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       console.log('[Anchoring] Sending PDF to server for CMS signing...');
 
       const pdfBase64 = Buffer.from(visualPdf).toString('base64');
+      // Extract identity details from verified claims
+      const credentialIssuer = session.verifiedClaims
+        ? getIssuerFromClaims(session.verifiedClaims)
+        : '';
+      const identityNumber = session.verifiedClaims
+        ? getIdentifierFromClaims(session.verifiedClaims)
+        : '';
+
       const cmsSignRes = await fetch('/api/signing/cms-sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +85,9 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
           signerAddress: session.walletAddress,
           signerPublicKey: session.publicKey,
           credentialId: session.credentialID,
-          credentialIssuer: 'ZCert Test Authority',
+          credentialIssuer,
+          credentialType: session.credentialType || undefined,
+          identityNumber: identityNumber || undefined,
         }),
       });
 

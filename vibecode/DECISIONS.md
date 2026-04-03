@@ -9,6 +9,25 @@
 
 <!-- Newest decision at top -->
 
+### 2026-04-04 - Pause Browser Extension Wallet & Accordion Layout
+
+**Context:** The current wallet connection step offers two accordion cards: Browser Extension and Mobile Wallet (QR). Product direction is to use the MyID app exclusively for wallet connection — users scan a QR code (desktop) or tap a deeplink (mobile). The Browser Extension option is not needed for now.
+
+**Decision:** Temporarily pause (comment out) the Browser Extension wallet option and the accordion layout. Rename "Mobile Wallet" to "MyID Wallet". Add automatic mobile device detection to dynamically switch between QR Code mode (desktop) and Deeplink mode (mobile). Badge changes from "QR Code" to "Deeplink" on mobile.
+
+**What's paused:**
+- `ExtensionConnect` component import and rendering
+- `isExtensionAvailable()` detection
+- Accordion expand/collapse UI (unnecessary with single option)
+
+**How to re-enable:** Uncomment the extension imports and restore the accordion UI in `wallet-connector.tsx`. See inline comments in that file.
+
+**Rationale:** Simplifies Step 2 to a single wallet connection method. The MyID app is the required identity verification tool, so it makes sense to unify wallet connection through the same app. The accordion is paused (not deleted) since we may re-add extension support later.
+
+**Decided By:** @izadi with AI input
+
+---
+
 ### 2026-03-31 - CMS/PKCS#7 PDF Signing: Node.js Implementation
 
 **Context:** The engineer spec (`Zetrix Sign - CMS_PKCS#7 PDF signing.docx`) recommended Python (pyHanko + pikepdf) for standards-compliant PDF signing. Need to decide whether to follow the Python approach or implement in Node.js.

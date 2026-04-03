@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,8 +16,20 @@ interface StepProps {
   prevStep: () => void;
 }
 
+function getIsMobile(): boolean {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+}
+
 export function StepWallet({ session, updateSession, nextStep, prevStep }: StepProps) {
   const isConnected = !!session.walletAddress && !!session.publicKey;
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(getIsMobile());
+  }, []);
 
   const handleConnected = (result: WalletConnectResult) => {
     updateSession({
@@ -41,7 +54,7 @@ export function StepWallet({ session, updateSession, nextStep, prevStep }: StepP
             </div>
           </div>
         ) : (
-          <WalletConnector onConnected={handleConnected} />
+          <WalletConnector onConnected={handleConnected} isMobile={isMobile} />
         )}
 
         <div className="flex justify-between">
