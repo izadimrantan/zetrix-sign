@@ -27,13 +27,16 @@ function generateSerialNumber(): string {
  * Build the VC references JSON payload for the custom extension.
  */
 function buildVcReferencesPayload(params: CertGenerationParams): string {
-  return JSON.stringify({
+  const payload: Record<string, string> = {
     credentialId: params.credentialId,
     credentialIssuer: params.credentialIssuer,
     credentialType: params.credentialType ?? 'VerifiableCredential',
     vcVerifiedAt: params.vcVerifiedAt ?? new Date().toISOString(),
-    signerPublicKey: params.signerPublicKey,
-  });
+  };
+  if (params.signerPublicKey) {
+    payload.signerPublicKey = params.signerPublicKey;
+  }
+  return JSON.stringify(payload);
 }
 
 /**
@@ -89,8 +92,9 @@ export async function generateSignerCertificate(
   oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
 
   // Include identity number (IC or passport) in the cert subject when available
+  // Use OID 2.5.4.5 directly — @peculiar/x509 doesn't recognize "SERIALNUMBER" as a name alias
   const subjectName = params.identityNumber
-    ? `CN=${signerName}, SERIALNUMBER=${params.identityNumber}, O=Zetrix AI Berhad, C=MY`
+    ? `CN=${signerName}, 2.5.4.5=${params.identityNumber}, O=Zetrix AI Berhad, C=MY`
     : `CN=${signerName}, O=Zetrix AI Berhad, C=MY`;
 
   // Build extensions array

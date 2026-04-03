@@ -37,6 +37,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
   const [failedAt, setFailedAt] = useState<SubStep | null>(null);
   const [mobileQrData, setMobileQrData] = useState('');
   const started = useRef(false);
+  const currentSubStepRef = useRef<SubStep>('embedding');
 
   useEffect(() => {
     if (started.current) return;
@@ -51,6 +52,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       setMobileQrData('');
 
       // ── Step 1: Embed visual signature into PDF (client-side) ──
+      currentSubStepRef.current = 'embedding';
       setSubStep('embedding');
       trackAnchoringSubStep('embedding');
       const pdfBytes = new Uint8Array(await session.pdfFile!.arrayBuffer());
@@ -62,6 +64,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       });
 
       // ── Step 2: Server applies CMS/PKCS#7 signature (single step) ──
+      currentSubStepRef.current = 'cms-signing';
       setSubStep('cms-signing');
       trackAnchoringSubStep('cms-signing');
       console.log('[Anchoring] Sending PDF to server for CMS signing...');
@@ -105,6 +108,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       // ── Step 4: Wallet signs the document hash ──
       // This signature is stored on-chain and verified by the smart contract's
       // ecVerify(documentHash, digitalSignature, signerPublicKey).
+      currentSubStepRef.current = 'signing';
       setSubStep('signing');
       trackAnchoringSubStep('signing');
 
@@ -127,6 +131,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       }
 
       // ── Step 5: Submit anchorDocument transaction ──
+      currentSubStepRef.current = 'anchoring';
       setSubStep('anchoring');
       trackAnchoringSubStep('anchoring');
       const contractAddress = process.env.NEXT_PUBLIC_ZETRIX_CONTRACT_ADDRESS!;
@@ -158,6 +163,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       console.log('[Anchoring] TX submitted:', txHash);
 
       // ── Step 6: Append anchor XMP via incremental update ──
+      currentSubStepRef.current = 'anchor-xmp';
       setSubStep('anchor-xmp');
       trackAnchoringSubStep('anchor-xmp');
       console.log('[Anchoring] Appending anchor XMP to signed PDF...');
@@ -185,6 +191,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       }
 
       // ── Step 7: Save session to DB ──
+      currentSubStepRef.current = 'saving';
       setSubStep('saving');
       trackAnchoringSubStep('saving');
       await fetch('/api/sessions', {
@@ -218,11 +225,12 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       setTimeout(() => nextStep(), 1500);
     } catch (err) {
       setMobileQrData('');
-      console.error('[Anchoring] Failed at sub-step:', subStep, err);
+      const failedStep = currentSubStepRef.current;
+      console.error('[Anchoring] Failed at sub-step:', failedStep, err);
       const message = err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
-      trackAnchoringError(subStep, message || 'Unknown error');
+      trackAnchoringError(failedStep, message || 'Unknown error');
       setError(message || 'Anchoring failed');
-      setFailedAt(subStep);
+      setFailedAt(failedStep);
       setSubStep('error');
     }
   }

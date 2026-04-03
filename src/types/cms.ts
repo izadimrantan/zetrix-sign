@@ -19,7 +19,7 @@ export interface CmsSignRequest {
   signerName: string;
   signerDid: string;
   signerAddress: string;
-  signerPublicKey: string; // Hex-encoded public key from wallet
+  signerPublicKey?: string; // Hex-encoded public key from wallet (optional — mobile SDK doesn't return it during auth)
   credentialId: string;
   credentialIssuer: string;
   credentialType?: 'mykad' | 'passport';
@@ -60,7 +60,7 @@ export interface CertGenerationParams {
   signerName: string;
   signerDid: string;
   signerAddress: string;
-  signerPublicKey: string; // Hex-encoded secp256k1 public key
+  signerPublicKey?: string; // Hex-encoded secp256k1 public key (optional for mobile wallet flow)
   credentialId: string;
   credentialIssuer: string;
   credentialType?: 'mykad' | 'passport';
