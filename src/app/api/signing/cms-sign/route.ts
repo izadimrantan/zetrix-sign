@@ -36,10 +36,16 @@ export async function POST(request: NextRequest) {
       identityNumber,
     } = body;
 
-    // Validate required fields
-    if (!pdfBase64 || !signerName || !signerAddress || !signerPublicKey) {
+    // Validate required fields (signerPublicKey is optional — mobile wallet
+    // SDK doesn't return it during auth, only during signMessage)
+    const missing = [
+      !pdfBase64 && 'pdfBase64',
+      !signerName && 'signerName',
+      !signerAddress && 'signerAddress',
+    ].filter(Boolean);
+    if (missing.length > 0) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: pdfBase64, signerName, signerAddress, signerPublicKey' },
+        { success: false, error: `Missing required fields: ${missing.join(', ')}` },
         { status: 400 }
       );
     }
