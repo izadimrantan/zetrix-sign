@@ -196,6 +196,14 @@ The wallet only exposes `signMessage()` — it cannot produce X.509 certs or CMS
 | `MICROSERVICE_BASE_URL` | Microservice API base URL | Yes |
 | `MICROSERVICE_API_KEY` | API key for microservice auth | Yes |
 | `MICROSERVICE_AUTH_TOKEN` | Auth token for microservice (server-side only, NOT exposed to client) | Yes |
+| `OID4VP_API_BASE` | OID4VP hosted verifier API base URL | Yes |
+| `OID4VP_API_KEY` | API key for OID4VP service | Yes |
+| `OID4VP_CALLBACK_SECRET` | HMAC-SHA256 secret for callback verification | Yes |
+| `OID4VP_CALLBACK_URL` | Public callback URL (ngrok in dev) | Yes |
+| `MYKAD_TEMPLATE_ID` | MyKad credential template DID | Yes |
+| `PASSPORT_TEMPLATE_ID` | Passport credential template DID | Yes |
+| `NEXT_PUBLIC_MYID_ANDROID_URL` | MyID app Android download link | Optional |
+| `NEXT_PUBLIC_MYID_IOS_URL` | MyID app iOS download link | Optional |
 | `DATABASE_URL` | Neon Postgres pooled connection URL | Yes |
 | `DATABASE_URL_UNPOOLED` | Neon Postgres direct connection URL | Yes |
 
@@ -243,24 +251,34 @@ All events are defined in `src/lib/analytics.ts` and use the `gtag('event', ...)
 
 ---
 
-## Verifiable Credentials — Future Integration
+## Identity Verification — OID4VP Hosted Verifier
 
-> **IMPORTANT:** This section documents a critical future requirement.
+> **Status:** Implemented and integrated. Uses OID4VP hosted verifier API (callback-based flow).
 
-The VC presentation step is currently implemented with hardcoded dummy data:
-- Name: "John Tan"
-- DID: "did:zetrix:test123"
-- Issuer: "ZCert Test Authority"
+### How It Works
+1. **Frontend** calls `POST /api/oid4vp/request` with credential type (mykad/passport)
+2. **Backend** creates a verification request with the OID4VP hosted verifier API → returns QR code data + stateId
+3. **User** scans QR with MyID app (desktop) or taps deeplink (mobile), approves credential disclosure
+4. **OID4VP service** sends HMAC-signed callback to `POST /api/oid4vp/callback` with verified claims
+5. **Frontend** polls `GET /api/oid4vp/status?stateId=...` until claims arrive
+6. **Verified claims** feed into CMS signing (X.509 cert subject + XMP metadata) and blockchain anchoring (credentialID)
 
-In the production version, users MUST present a real Verifiable Credential from their Zetrix Wallet before they can sign documents. The VC's `credentialID` is stored on-chain as part of the `anchorDocument` call, creating a verifiable link between the signer's identity credential and the signed document.
+### Supported Credential Types
+| Type | Requested Claims | Template ID Env Var |
+|------|-----------------|---------------------|
+| MyKad (Malaysian IC) | `name`, `icNo` | `MYKAD_TEMPLATE_ID` |
+| Passport (Malaysian) | `name`, `passportNumber` | `PASSPORT_TEMPLATE_ID` |
 
-**Future implementation requires:**
-- Wallet SDK's `getVP()` method to request a Verifiable Presentation
-- Wallet SDK's `verifyVC()` method to verify the credential
-- Backend verification of the VC issuer, signature, and validity
-- Extracting signer identity (name, DID) from the VC claims
+### Key Implementation Details
+- **Callback payload uses snake_case**: `state_id`, `presentation_id`, `verified_claims`
+- **`verified_claims` uses `$ref` pointers**: Actual data lives in `credentials[0].credential_subject.mykad` (or `.passport`)
+- **HMAC-SHA256 signature**: Base64-encoded (NOT hex), computed as `HMAC-SHA256(secret, "{timestamp}.{json_body}")`
+- **In-memory verification store**: Bridges async callback to frontend polling (35-min TTL)
+- **ngrok required for local dev**: OID4VP service cannot reach localhost
+- **MyID app required**: Users need the MyID wallet app (by MIMOS) to store and present verifiable credentials
 
-The UI for the VC step should be designed to accommodate this transition — currently showing a pre-filled confirmation card, which will later be replaced with a wallet-prompted VC selection flow.
+### Migration History
+Initially implemented SDK direct approach (`getVP()` on `zetrix-connect-wallet-sdk`), but MyID wallet returned "VC NOT AVAILABLE". Migrated to OID4VP hosted verifier API which works reliably.
 
 ---
 
@@ -288,12 +306,15 @@ The UI for the VC step should be designed to accommodate this transition — cur
 ## Known Limitations / Tech Debt
 
 - [x] Browser extension signing works (uses signMessage with 5s delay between calls)
-- [ ] Mobile wallet connection not tested yet
-- [ ] Verifiable Credential presentation is hardcoded with dummy data
+- [x] Browser extension wallet paused — MyID wallet is the single connection method
+- [ ] Mobile wallet (deeplink) not tested yet
+- [x] Identity verification: OID4VP hosted verifier integrated (MyKad + Passport)
+- [ ] OID4VP `extractClaims()` fix for `$ref` pointers — needs end-to-end confirmation
+- [ ] In-memory verification store won't work across Vercel serverless instances (need Redis/KV for production)
 - [ ] No persistent file storage — PDFs processed client-side only
 - [x] Contract interaction uses microservice API (SDK fallback not implemented)
 - [x] Database: migrated from SQLite to Neon Postgres
 
 ---
 
-*Last updated: 2026-03-31*
+*Last updated: 2026-04-04*
