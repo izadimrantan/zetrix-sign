@@ -6,10 +6,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { embedSignatureOnPdf } from '@/lib/pdf';
-import { computeSHA256 } from '@/lib/hash';
 import { signMessageExtension, signMessageMobile, reconnectAndSignMobile } from '@/lib/wallet';
 import { buildTransactionBlob, submitSignedTransaction } from '@/lib/blockchain';
 import { trackAnchoringStart, trackAnchoringSubStep, trackAnchoringSuccess, trackAnchoringError, trackAnchoringRetry } from '@/lib/analytics';
+import { getIdentifierFromClaims, getIssuerFromClaims } from '@/lib/oid4vp/claims';
 import type { SigningSession } from '@/types/signing';
 
 interface StepProps {
@@ -21,7 +21,15 @@ interface StepProps {
   signedPdfBytesRef: React.MutableRefObject<Uint8Array | null>;
 }
 
-type SubStep = 'embedding' | 'hashing' | 'signing' | 'anchoring' | 'saving' | 'done' | 'error';
+type SubStep =
+  | 'embedding'
+  | 'cms-signing'
+  | 'signing'
+  | 'anchoring'
+  | 'anchor-xmp'
+  | 'saving'
+  | 'done'
+  | 'error';
 
 export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytesRef }: StepProps) {
   const [subStep, setSubStep] = useState<SubStep>('embedding');
@@ -42,84 +50,141 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       trackAnchoringStart();
       setMobileQrData('');
 
-      // Step 1: Embed signature into PDF
+      // ── Step 1: Embed visual signature into PDF (client-side) ──
       setSubStep('embedding');
       trackAnchoringSubStep('embedding');
       const pdfBytes = new Uint8Array(await session.pdfFile!.arrayBuffer());
-      const finalPdf = await embedSignatureOnPdf(pdfBytes, {
+      const visualPdf = await embedSignatureOnPdf(pdfBytes, {
         signatureImage: session.signatureImage,
         position: session.signaturePosition!,
         signerName: session.signerName,
         walletAddress: session.walletAddress,
       });
-      signedPdfBytesRef.current = finalPdf;
 
-      // Step 2: Hash the final PDF (CRITICAL: this is the canonical hash)
-      setSubStep('hashing');
-      trackAnchoringSubStep('hashing');
-      const documentHash = await computeSHA256(finalPdf);
+      // ── Step 2: Server applies CMS/PKCS#7 signature (single step) ──
+      setSubStep('cms-signing');
+      trackAnchoringSubStep('cms-signing');
+      console.log('[Anchoring] Sending PDF to server for CMS signing...');
 
-      // Step 3: Wallet signs the document hash
+      const pdfBase64 = Buffer.from(visualPdf).toString('base64');
+      // Extract identity details from verified claims
+      const credentialIssuer = session.verifiedClaims
+        ? getIssuerFromClaims(session.verifiedClaims)
+        : '';
+      const identityNumber = session.verifiedClaims
+        ? getIdentifierFromClaims(session.verifiedClaims)
+        : '';
+
+      const cmsSignRes = await fetch('/api/signing/cms-sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdfBase64,
+          signerName: session.signerName,
+          signerDid: session.signerDID || `did:zetrix:${session.walletAddress}`,
+          signerAddress: session.walletAddress,
+          signerPublicKey: session.publicKey,
+          credentialId: session.credentialID,
+          credentialIssuer,
+          credentialType: session.credentialType || undefined,
+          identityNumber: identityNumber || undefined,
+        }),
+      });
+
+      if (!cmsSignRes.ok) {
+        const errBody = await cmsSignRes.json().catch(() => ({}));
+        throw new Error((errBody as { error?: string }).error || `CMS signing failed (${cmsSignRes.status})`);
+      }
+
+      const { signedPdfBase64, documentHash } = await cmsSignRes.json();
+      console.log('[Anchoring] CMS signature applied. Document hash:', documentHash?.slice(0, 20) + '...');
+
+      // Store the CMS-signed PDF bytes for later download
+      const cmsSignedPdfBytes = Uint8Array.from(atob(signedPdfBase64), (c) => c.charCodeAt(0));
+
+      // ── Step 4: Wallet signs the document hash ──
+      // This signature is stored on-chain and verified by the smart contract's
+      // ecVerify(documentHash, digitalSignature, signerPublicKey).
       setSubStep('signing');
       trackAnchoringSubStep('signing');
-      let digitalSignature: string;
+
+      let walletSignature: string;
       let signerPublicKey: string;
 
       if (session.connectionMethod === 'extension') {
         console.log('[Anchoring] Requesting extension to sign document hash...');
         const signResult = await signMessageExtension(documentHash);
-        console.log('[Anchoring] Document hash signed:', { signData: signResult.signData?.slice(0, 20) + '...', publicKey: signResult.publicKey?.slice(0, 20) + '...' });
-        digitalSignature = signResult.signData;
+        walletSignature = signResult.signData;
         signerPublicKey = signResult.publicKey || session.publicKey;
       } else {
-        // Mobile: reconnect with a fresh QR for auth+sign combined
-        console.log('[Anchoring] Mobile: reconnecting for authAndSignMessage...');
+        console.log('[Anchoring] Mobile: reconnecting for sign...');
         const signResult = await reconnectAndSignMobile(documentHash, (qrContent) => {
           setMobileQrData(qrContent);
         });
-        setMobileQrData(''); // Clear QR after successful sign
-        console.log('[Anchoring] Mobile hash signed, publicKey:', signResult.publicKey?.slice(0, 20) + '...');
-        digitalSignature = signResult.signData;
+        setMobileQrData('');
+        walletSignature = signResult.signData;
         signerPublicKey = signResult.publicKey || session.publicKey;
       }
 
-      // Step 4: Submit anchorDocument transaction
+      // ── Step 5: Submit anchorDocument transaction ──
       setSubStep('anchoring');
       trackAnchoringSubStep('anchoring');
       const contractAddress = process.env.NEXT_PUBLIC_ZETRIX_CONTRACT_ADDRESS!;
       const anchorInput = {
         method: 'anchorDocument',
-        params: { documentHash, digitalSignature, signerPublicKey, credentialID: session.credentialID },
+        params: {
+          documentHash,
+          digitalSignature: walletSignature,
+          signerPublicKey,
+          credentialID: session.credentialID,
+        },
       };
+
+      console.log('[Anchoring] Building transaction blob...');
+      const { transactionBlob: blob, hash: blobHash } = await buildTransactionBlob(session.walletAddress, anchorInput);
 
       let txHash: string;
 
-      // Both extension and mobile use the same pattern:
-      // build-blob → sign blob → submit signed transaction
-      console.log('[Anchoring] Building transaction blob...');
-      const { transactionBlob: blob, hash: blobHash } = await buildTransactionBlob(session.walletAddress, anchorInput);
-      console.log('[Anchoring] Blob built (length:', blob.length, '), blob preview:', blob.slice(0, 40) + '...');
-
       if (session.connectionMethod === 'mobile') {
-        // Mobile: sign blob over the same WebSocket session from reconnectAndSignMobile
-        // (no QR needed — phone gets a popup to approve)
-        console.log('[Anchoring] Mobile: signing blob via signMessageMobile...');
+        console.log('[Anchoring] Mobile: signing blob...');
         const blobSign = await signMessageMobile(blob);
-        console.log('[Anchoring] Mobile blob signed, submitting to blockchain...');
         txHash = await submitSignedTransaction(blob, blobSign.signData, blobSign.publicKey || signerPublicKey, blobHash, session.walletAddress);
-        console.log('[Anchoring] Transaction submitted, txHash:', txHash);
       } else {
-        // Extension: delay to let the extension reset after the first signMessage call
-        console.log('[Anchoring] Waiting 5s for extension to reset before second signMessage...');
+        console.log('[Anchoring] Waiting 3s for extension to reset...');
         await new Promise(r => setTimeout(r, 3_000));
-        console.log('[Anchoring] Requesting extension to sign blob via signMessage...');
         const blobSign = await signMessageExtension(blob);
-        console.log('[Anchoring] Blob signed, submitting to blockchain...');
         txHash = await submitSignedTransaction(blob, blobSign.signData, blobSign.publicKey || session.publicKey, blobHash, session.walletAddress);
-        console.log('[Anchoring] Transaction submitted, txHash:', txHash);
+      }
+      console.log('[Anchoring] TX submitted:', txHash);
+
+      // ── Step 6: Append anchor XMP via incremental update ──
+      setSubStep('anchor-xmp');
+      trackAnchoringSubStep('anchor-xmp');
+      console.log('[Anchoring] Appending anchor XMP to signed PDF...');
+
+      const anchorRes = await fetch('/api/signing/cms-anchor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signedPdfBase64,
+          txHash,
+          blockNumber: 0, // Will be populated when we have block info
+          blockTimestamp: new Date().toISOString(),
+          documentHash,
+          chainId: 'zetrix-testnet',
+        }),
+      });
+
+      if (!anchorRes.ok) {
+        // Non-critical: if anchor XMP fails, we still have the signed PDF
+        console.warn('[Anchoring] Anchor XMP append failed, using PDF without anchor metadata');
+        signedPdfBytesRef.current = cmsSignedPdfBytes;
+      } else {
+        const { finalPdfBase64 } = await anchorRes.json();
+        signedPdfBytesRef.current = Uint8Array.from(atob(finalPdfBase64), (c) => c.charCodeAt(0));
       }
 
-      // Step 5: Save session to DB
+      // ── Step 7: Save session to DB ──
       setSubStep('saving');
       trackAnchoringSubStep('saving');
       await fetch('/api/sessions', {
@@ -133,23 +198,23 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
           credentialID: session.credentialID,
           signatureType: session.signatureType,
           documentHash,
-          digitalSignature,
+          digitalSignature: walletSignature,
           signerPublicKey,
           txHash,
+          anchorVersion: '2.0',
         }),
       });
 
-      // Update session state with results
       updateSession({
         documentHash,
-        digitalSignature,
+        digitalSignature: walletSignature,
         txHash,
+        anchorVersion: '2.0',
         timestamp: new Date().toISOString(),
       });
 
       setSubStep('done');
       trackAnchoringSuccess(txHash);
-      // Auto-advance after brief delay
       setTimeout(() => nextStep(), 1500);
     } catch (err) {
       setMobileQrData('');
@@ -163,10 +228,11 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
   }
 
   const steps: { key: SubStep; label: string }[] = [
-    { key: 'embedding', label: 'Embedding signature into PDF...' },
-    { key: 'hashing', label: 'Computing document hash (SHA256)...' },
+    { key: 'embedding', label: 'Embedding visual signature...' },
+    { key: 'cms-signing', label: 'Applying CMS/PKCS#7 digital signature...' },
     { key: 'signing', label: 'Signing document hash with wallet...' },
     { key: 'anchoring', label: 'Submitting to Zetrix blockchain...' },
+    { key: 'anchor-xmp', label: 'Embedding blockchain proof in PDF...' },
     { key: 'saving', label: 'Saving session record...' },
     { key: 'done', label: 'Anchoring complete!' },
   ];
@@ -176,7 +242,9 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
   const currentIdx = steps.findIndex((s) => s.key === activeStep);
 
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader>
         <CardTitle>Blockchain Anchoring</CardTitle>
       </CardHeader>
@@ -224,5 +292,6 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }

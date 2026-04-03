@@ -4,10 +4,19 @@ import { useCallback, useRef, useState } from 'react';
 import { Upload, FileSearch, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { computeSHA256 } from '@/lib/hash';
+import { detectCmsSignature, stripAnchorUpdate } from '@/lib/cms/detect-cms';
 import { trackVerifyFileUpload } from '@/lib/analytics';
 
+interface CmsInfo {
+  hasCmsSignature: boolean;
+  subFilter?: string;
+  signerName?: string;
+  reason?: string;
+  location?: string;
+}
+
 interface Props {
-  onHashComputed: (hash: string, fileName: string) => void;
+  onHashComputed: (hash: string, fileName: string, cmsInfo?: CmsInfo) => void;
   isLoading: boolean;
 }
 
@@ -33,8 +42,12 @@ export function VerifyUpload({ onHashComputed, isLoading }: Props) {
     trackVerifyFileUpload(file.name);
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const hash = await computeSHA256(bytes);
-      onHashComputed(hash, file.name);
+      const cmsInfo = detectCmsSignature(bytes);
+      // If the PDF has anchor XMP appended after signing, hash the
+      // pre-anchor bytes (which is what was anchored on-chain).
+      const preAnchor = stripAnchorUpdate(bytes);
+      const hash = await computeSHA256(preAnchor ?? bytes);
+      onHashComputed(hash, file.name, cmsInfo);
     } catch {
       setError('Failed to read PDF.');
     }
@@ -48,7 +61,9 @@ export function VerifyUpload({ onHashComputed, isLoading }: Props) {
   };
 
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileSearch className="h-5 w-5" />
@@ -96,5 +111,6 @@ export function VerifyUpload({ onHashComputed, isLoading }: Props) {
         {error && <p className="text-sm text-destructive">{error}</p>}
       </CardContent>
     </Card>
+    </div>
   );
 }

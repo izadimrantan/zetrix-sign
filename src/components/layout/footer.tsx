@@ -1,16 +1,13 @@
-import { Shield } from 'lucide-react';
-
 export function Footer() {
   return (
-    <footer className="border-t bg-muted/50 py-6">
-      <div className="container mx-auto flex flex-col items-center gap-2 px-4 text-sm text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4" />
-          <span>Powered by Zetrix Blockchain</span>
-          <span className="text-muted-foreground/60">·</span>
-          <span>Protected by Cloudflare</span>
-        </div>
-        <p>&copy; {new Date().getFullYear()} Zetrix Sign. All rights reserved.</p>
+    <footer className="border-t border-[var(--zetrix-border)] py-6">
+      <div className="container mx-auto flex flex-col items-center justify-between gap-2 px-4 sm:flex-row">
+        <span className="text-xs font-normal text-[var(--zetrix-text-light)]">
+          Protected by Cloudflare
+        </span>
+        <span className="text-xs font-normal text-[var(--zetrix-text-light)]">
+          Powered by Zetrix Blockchain
+        </span>
       </div>
     </footer>
   );

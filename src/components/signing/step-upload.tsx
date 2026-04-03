@@ -60,7 +60,9 @@ export function StepUpload({ session, updateSession, nextStep }: StepProps) {
   };
 
   return (
-    <Card>
+    <div style={{ animation: 'fadeUp 0.4s ease both' }}>
+    <Card className="relative overflow-hidden border-[var(--zetrix-border)] shadow-sm">
+      <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent" />
       <CardHeader>
         <CardTitle>Upload Document</CardTitle>
       </CardHeader>
@@ -121,5 +123,6 @@ export function StepUpload({ session, updateSession, nextStep }: StepProps) {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

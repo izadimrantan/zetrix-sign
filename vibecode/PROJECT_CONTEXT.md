@@ -8,7 +8,7 @@
 
 **Project Name:** Zetrix Sign
 **Description:** A blockchain-anchored PDF digital signing platform. Users upload a PDF, authenticate via Zetrix Wallet, present a Verifiable Credential, apply a visual signature, hash the signed PDF, sign the hash with their wallet, anchor it on the Zetrix blockchain, and later verify documents against on-chain records.
-**Status:** Production (Testnet)
+**Status:** Production (Testnet) — OID4VP identity verification integrated, CMS/PKCS#7 signing complete
 
 ---
 
@@ -26,8 +26,12 @@
 | Signature Drawing | react-signature-canvas | latest |
 | Wallet (Extension) | window.zetrix API | native |
 | Wallet (Mobile) | zetrix-connect-wallet-sdk | latest |
+| Identity Verification | OID4VP hosted verifier API (zid-oid4vp-sandbox.zetrix.com) | v1 |
 | Contract Queries | zetrix-sdk-nodejs (preferred) / microservice API (fallback) | latest |
 | Contract TX Submission | Wallet SDK sendTransaction (user pays gas) | - |
+| CMS/PKCS#7 Signing | @signpdf/signpdf + pkijs + @peculiar/x509 (server-side) | latest |
+| XMP Metadata | Manual XML construction (server-side) | - |
+| Incremental PDF Update | Manual byte-level append (server-side, no native addons) | - |
 | Database | Prisma ORM + Neon Postgres (serverless) | latest |
 | Analytics | Google Analytics 4 (gtag.js) | GA4 |
 | Hosting | Vercel | - |
@@ -52,7 +56,15 @@ zetrix-sign-official/
     │   │   ├── sign/page.tsx      # Signing flow stepper (/sign)
     │   │   ├── verify/page.tsx    # Document verification (/verify)
     │   │   └── api/               # Next.js API routes
-    │   │       └── contract/      # Contract query endpoints
+    │   │       ├── contract/      # Contract query endpoints
+    │   │       ├── oid4vp/        # OID4VP identity verification
+    │   │       │   ├── request/route.ts   # Create verification request → QR
+    │   │       │   ├── callback/route.ts  # Receive HMAC-signed callback
+    │   │       │   └── status/route.ts    # Frontend polls for result
+    │   │       └── signing/       # CMS signing API routes
+    │   │           ├── cms-sign/route.ts      # Phase 1: prep PDF + hash
+    │   │           ├── cms-complete/route.ts  # Phase 2: inject CMS sig
+    │   │           └── cms-anchor/route.ts    # Phase 3: anchor XMP
     │   ├── components/
     │   │   ├── ui/                # shadcn/ui components
     │   │   ├── signing/           # Signing flow step components
@@ -66,9 +78,20 @@ zetrix-sign-official/
     │   │   ├── pdf.ts             # PDF processing (pdf-lib)
     │   │   ├── hash.ts            # SHA256 hashing utilities
     │   │   ├── blockchain.ts      # Contract interaction layer
-    │   │   ├── vc.ts              # VC handling (dummy now, real later)
+    │   │   ├── vc.ts              # VC type re-exports
+    │   │   ├── oid4vp/
+    │   │   │   ├── verification-store.ts  # In-memory store (callback → poll)
+    │   │   │   └── claims.ts              # Claim extraction helpers
     │   │   ├── analytics.ts       # GA event tracking
-    │   │   └── db.ts              # Prisma client singleton
+    │   │   ├── db.ts              # Prisma client singleton
+    │   │   ├── signing-session-store.ts  # CMS session store (5-min TTL)
+    │   │   └── cms/               # CMS/PKCS#7 signing (server-side)
+    │   │       ├── x509-cert.ts       # X.509 v3 certificate generation
+    │   │       ├── cms-signer.ts      # CMS SignedData builder (pkijs)
+    │   │       ├── pdf-cms-sign.ts    # PDF placeholder + byte range hash
+    │   │       ├── xmp-metadata.ts    # XMP XML construction
+    │   │       ├── incremental-update.ts  # Byte-level incremental PDF update
+    │   │       └── detect-cms.ts      # CMS signature detection (verify)
     │   └── types/                 # TypeScript type definitions
     ├── prisma/
     │   ├── schema.prisma
@@ -77,9 +100,10 @@ zetrix-sign-official/
 ```
 
 ### Key Patterns
-- **Client-side PDF processing:** PDFs are processed entirely in the browser using pdf-lib. No server-side file storage needed. Files never leave the user's device.
+- **Hybrid PDF processing (post-CMS upgrade):** Visual signature embedding remains client-side (pdf-lib). CMS/PKCS#7 signing, XMP metadata embedding, and incremental updates happen server-side via new API routes. PDFs are processed in memory only — never stored on disk.
 - **Single-page stepper:** The signing flow (/sign) uses a multi-step stepper on a single page. All state is managed in React state with sessionStorage backup.
 - **Dual wallet support:** Browser extension (window.zetrix) for desktop + QR code via zetrix-connect-wallet-sdk for mobile.
+- **Wallet-delegated CMS signing:** Server prepares the CMS structure, but the actual document hash is signed by the user's wallet via `signMessage()`. The server never holds private keys.
 - **Contract interaction layer:** Read-only queries go through Next.js API routes (using zetrix-sdk-nodejs). Transaction submission goes directly through the wallet SDK.
 
 ### Critical Files (Don't Modify Without Approval)
@@ -118,8 +142,34 @@ Steps within the `/sign` route:
 3. **Create Signature** — Two options: auto-generated text signature or hand-drawn canvas signature.
 4. **Place Signature** — Drag signature onto PDF preview to position it.
 5. **Review & Sign** — Summary of all details. Confirm to proceed.
-6. **Blockchain Anchoring** — System generates final PDF with signature embedded, computes SHA256 hash, wallet signs the hash, wallet submits anchorDocument transaction, receives TX hash.
-7. **Complete** — Displays TX hash, document details, download button, verify link.
+6. **Blockchain Anchoring** — Multi-phase: (a) embed visual signature client-side, (b) server applies CMS/PKCS#7 signature (wallet signs the hash via signMessage), (c) hash signed PDF, (d) wallet submits anchorDocument TX, (e) server appends anchor XMP via incremental update.
+7. **Complete** — Displays TX hash, document details, download button, explorer link.
+
+---
+
+## CMS/PKCS#7 Signing (Upcoming)
+
+> **Spec:** `docs/superpowers/specs/2026-03-30-cms-pkcs7-pdf-signing-design.md`
+> **Plan:** `docs/superpowers/plans/2026-03-30-cms-pkcs7-pdf-signing.md`
+
+### What This Adds
+The current signing flow produces PDFs with a visual signature image + blockchain hash. Adobe Acrobat sees nothing special. The CMS/PKCS#7 upgrade adds **standards-compliant digital signatures** that PDF readers recognize — signature panel, tamper detection, signer identity.
+
+### Architecture Summary
+1. **X.509 Certificate** — Wraps the signer's Zetrix public key + VC identity into a cert that PDF readers understand
+2. **CMS/PKCS#7 Signature** — Industry-standard detached signature embedded in the PDF. Wallet signs the hash; server constructs the CMS wrapper.
+3. **XMP Metadata** — VC identity embedded before signing (covered by CMS). Blockchain proof appended after signing (incremental update).
+
+### New API Routes
+- `POST /api/signing/cms-sign` — Prepare PDF + return hash for wallet signing
+- `POST /api/signing/cms-complete` — Inject wallet signature into CMS structure
+- `POST /api/signing/cms-anchor` — Append blockchain proof XMP (incremental update)
+
+### New Dependencies
+`@peculiar/x509`, `@signpdf/signpdf`, `@signpdf/placeholder-pdf-lib`, `pkijs`, `asn1js`
+
+### Key Constraint
+The wallet only exposes `signMessage()` — it cannot produce X.509 certs or CMS structures. So the server constructs the CMS wrapper, but the wallet signs the actual document hash (wallet-delegated signing model).
 
 ---
 
@@ -146,6 +196,14 @@ Steps within the `/sign` route:
 | `MICROSERVICE_BASE_URL` | Microservice API base URL | Yes |
 | `MICROSERVICE_API_KEY` | API key for microservice auth | Yes |
 | `MICROSERVICE_AUTH_TOKEN` | Auth token for microservice (server-side only, NOT exposed to client) | Yes |
+| `OID4VP_API_BASE` | OID4VP hosted verifier API base URL | Yes |
+| `OID4VP_API_KEY` | API key for OID4VP service | Yes |
+| `OID4VP_CALLBACK_SECRET` | HMAC-SHA256 secret for callback verification | Yes |
+| `OID4VP_CALLBACK_URL` | Public callback URL (ngrok in dev) | Yes |
+| `MYKAD_TEMPLATE_ID` | MyKad credential template DID | Yes |
+| `PASSPORT_TEMPLATE_ID` | Passport credential template DID | Yes |
+| `NEXT_PUBLIC_MYID_ANDROID_URL` | MyID app Android download link | Optional |
+| `NEXT_PUBLIC_MYID_IOS_URL` | MyID app iOS download link | Optional |
 | `DATABASE_URL` | Neon Postgres pooled connection URL | Yes |
 | `DATABASE_URL_UNPOOLED` | Neon Postgres direct connection URL | Yes |
 
@@ -193,24 +251,34 @@ All events are defined in `src/lib/analytics.ts` and use the `gtag('event', ...)
 
 ---
 
-## Verifiable Credentials — Future Integration
+## Identity Verification — OID4VP Hosted Verifier
 
-> **IMPORTANT:** This section documents a critical future requirement.
+> **Status:** Implemented and integrated. Uses OID4VP hosted verifier API (callback-based flow).
 
-The VC presentation step is currently implemented with hardcoded dummy data:
-- Name: "John Tan"
-- DID: "did:zetrix:test123"
-- Issuer: "ZCert Test Authority"
+### How It Works
+1. **Frontend** calls `POST /api/oid4vp/request` with credential type (mykad/passport)
+2. **Backend** creates a verification request with the OID4VP hosted verifier API → returns QR code data + stateId
+3. **User** scans QR with MyID app (desktop) or taps deeplink (mobile), approves credential disclosure
+4. **OID4VP service** sends HMAC-signed callback to `POST /api/oid4vp/callback` with verified claims
+5. **Frontend** polls `GET /api/oid4vp/status?stateId=...` until claims arrive
+6. **Verified claims** feed into CMS signing (X.509 cert subject + XMP metadata) and blockchain anchoring (credentialID)
 
-In the production version, users MUST present a real Verifiable Credential from their Zetrix Wallet before they can sign documents. The VC's `credentialID` is stored on-chain as part of the `anchorDocument` call, creating a verifiable link between the signer's identity credential and the signed document.
+### Supported Credential Types
+| Type | Requested Claims | Template ID Env Var |
+|------|-----------------|---------------------|
+| MyKad (Malaysian IC) | `name`, `icNo` | `MYKAD_TEMPLATE_ID` |
+| Passport (Malaysian) | `name`, `passportNumber` | `PASSPORT_TEMPLATE_ID` |
 
-**Future implementation requires:**
-- Wallet SDK's `getVP()` method to request a Verifiable Presentation
-- Wallet SDK's `verifyVC()` method to verify the credential
-- Backend verification of the VC issuer, signature, and validity
-- Extracting signer identity (name, DID) from the VC claims
+### Key Implementation Details
+- **Callback payload uses snake_case**: `state_id`, `presentation_id`, `verified_claims`
+- **`verified_claims` uses `$ref` pointers**: Actual data lives in `credentials[0].credential_subject.mykad` (or `.passport`)
+- **HMAC-SHA256 signature**: Base64-encoded (NOT hex), computed as `HMAC-SHA256(secret, "{timestamp}.{json_body}")`
+- **In-memory verification store**: Bridges async callback to frontend polling (35-min TTL)
+- **ngrok required for local dev**: OID4VP service cannot reach localhost
+- **MyID app required**: Users need the MyID wallet app (by MIMOS) to store and present verifiable credentials
 
-The UI for the VC step should be designed to accommodate this transition — currently showing a pre-filled confirmation card, which will later be replaced with a wallet-prompted VC selection flow.
+### Migration History
+Initially implemented SDK direct approach (`getVP()` on `zetrix-connect-wallet-sdk`), but MyID wallet returned "VC NOT AVAILABLE". Migrated to OID4VP hosted verifier API which works reliably.
 
 ---
 
@@ -238,12 +306,15 @@ The UI for the VC step should be designed to accommodate this transition — cur
 ## Known Limitations / Tech Debt
 
 - [x] Browser extension signing works (uses signMessage with 5s delay between calls)
-- [ ] Mobile wallet connection not tested yet
-- [ ] Verifiable Credential presentation is hardcoded with dummy data
+- [x] Browser extension wallet paused — MyID wallet is the single connection method
+- [ ] Mobile wallet (deeplink) not tested yet
+- [x] Identity verification: OID4VP hosted verifier integrated (MyKad + Passport)
+- [ ] OID4VP `extractClaims()` fix for `$ref` pointers — needs end-to-end confirmation
+- [ ] In-memory verification store won't work across Vercel serverless instances (need Redis/KV for production)
 - [ ] No persistent file storage — PDFs processed client-side only
 - [x] Contract interaction uses microservice API (SDK fallback not implemented)
 - [x] Database: migrated from SQLite to Neon Postgres
 
 ---
 
-*Last updated: 2026-03-15*
+*Last updated: 2026-04-04*

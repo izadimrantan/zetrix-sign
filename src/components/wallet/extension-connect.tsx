@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Monitor } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { isExtensionAvailable, connectExtension } from '@/lib/wallet';
 import { trackWalletConnectStart, trackWalletConnectSuccess, trackWalletConnectError } from '@/lib/analytics';
@@ -9,9 +9,10 @@ import type { WalletConnectResult } from '@/types/wallet';
 
 interface Props {
   onConnected: (result: WalletConnectResult) => void;
+  inline?: boolean;
 }
 
-export function ExtensionConnect({ onConnected }: Props) {
+export function ExtensionConnect({ onConnected, inline }: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState('');
   const available = isExtensionAvailable();
@@ -33,6 +34,21 @@ export function ExtensionConnect({ onConnected }: Props) {
   };
 
   if (!available) {
+    if (inline) {
+      return (
+        <div className="flex items-center gap-3">
+          <a
+            href="https://chromewebstore.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            Install Extension
+          </a>
+          <span className="text-xs text-muted-foreground">Extension not detected</span>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center gap-4 py-8">
         <AlertCircle className="h-10 w-10 text-muted-foreground" />
@@ -45,6 +61,19 @@ export function ExtensionConnect({ onConnected }: Props) {
         >
           Install Extension
         </a>
+      </div>
+    );
+  }
+
+  if (inline) {
+    return (
+      <div className="flex items-center gap-3">
+        <Button size="sm" onClick={handleConnect} disabled={status === 'loading'}>
+          {status === 'loading' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Monitor className="mr-2 h-4 w-4" />
+          Connect Extension
+        </Button>
+        {error && <span className="text-xs text-destructive">{error}</span>}
       </div>
     );
   }

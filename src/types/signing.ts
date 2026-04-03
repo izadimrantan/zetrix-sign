@@ -1,3 +1,5 @@
+import type { VerifiedClaims } from './oid4vp';
+
 export enum SigningStep {
   Upload = 0,
   WalletIdentity = 1,
@@ -28,10 +30,12 @@ export interface SigningSession {
   publicKey: string;
   connectionMethod: 'extension' | 'mobile' | '';
 
-  // Step 3
+  // Step 3 (identity verification via OID4VP)
   signerName: string;
   signerDID: string;
   credentialID: string;
+  credentialType: 'mykad' | 'passport' | '';
+  verifiedClaims: VerifiedClaims | null;
 
   // Step 4
   signatureType: SignatureType | '';
@@ -44,6 +48,10 @@ export interface SigningSession {
   documentHash: string;
   digitalSignature: string;
   txHash: string;
+
+  // CMS/PKCS#7 signing (added in v2.0)
+  anchorVersion: string; // '1.0' (legacy) or '2.0' (CMS)
+  cmsSessionId: string; // Server-side CMS session ID
 
   // Meta
   currentStep: SigningStep;
@@ -58,6 +66,8 @@ export interface SerializableSession {
   signerName: string;
   signerDID: string;
   credentialID: string;
+  credentialType: string;
+  verifiedClaims: VerifiedClaims | null;
   signatureType: string;
   signatureImage: string;
   signaturePosition: SignaturePosition | null;
@@ -65,5 +75,7 @@ export interface SerializableSession {
   documentHash: string;
   digitalSignature: string;
   txHash: string;
+  anchorVersion: string;
+  cmsSessionId: string;
   timestamp: string;
 }
