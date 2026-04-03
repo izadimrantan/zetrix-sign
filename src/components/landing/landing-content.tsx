@@ -1,6 +1,6 @@
 'use client';
 
-import { Upload, ShieldCheck, Link2 } from 'lucide-react';
+import { Upload, ShieldCheck, Link2, Fingerprint, FileCheck, BadgeCheck, Scan, PenTool, Anchor, Search } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { HeroBackground } from '@/components/landing/hero-background';
@@ -9,30 +9,51 @@ import { trackLandingCTA } from '@/lib/analytics';
 
 const features = [
   {
-    icon: Upload,
-    title: 'Simple Upload',
+    icon: Fingerprint,
+    title: 'Verifiable Identity',
     description:
-      'Drag and drop your PDF document to begin the signing process. We handle the cryptography, hashing, and blockchain anchoring automatically.',
+      'Prove who you are using government-issued digital credentials from your MyID wallet — no copies of your IC or passport needed. Only the claims you approve are shared.',
   },
   {
-    icon: ShieldCheck,
-    title: 'Verified Identity',
+    icon: FileCheck,
+    title: 'Standards-Compliant Signatures',
     description:
-      'Connect your Zetrix wallet — browser extension or mobile app — to cryptographically prove your identity.',
+      'Documents are signed with CMS/PKCS#7 digital signatures — the same standard recognized by Adobe Acrobat and Foxit Reader. Tamper detection is built in.',
   },
   {
     icon: Link2,
-    title: 'Blockchain Secure',
+    title: 'Blockchain Anchored',
     description:
-      'Your document hash is permanently anchored on the Zetrix blockchain. Anyone can verify it — forever.',
+      'Every signed document is permanently anchored on the Zetrix blockchain. Anyone can independently verify its authenticity — forever.',
   },
 ];
 
 const steps = [
-  { number: '1', title: 'Upload', description: 'Upload your PDF document to get started' },
-  { number: '2', title: 'Connect', description: 'Link your Zetrix wallet and verify identity' },
-  { number: '3', title: 'Sign', description: 'Create and place your digital signature' },
-  { number: '4', title: 'Anchor', description: 'Hash is anchored permanently on-chain' },
+  { number: '1', icon: Upload, title: 'Upload', description: 'Upload your PDF document to begin the signing process' },
+  { number: '2', icon: Scan, title: 'Verify Identity', description: 'Scan the QR code with your MyID app and approve credential sharing' },
+  { number: '3', icon: PenTool, title: 'Sign', description: 'Create your digital signature and place it on the document' },
+  { number: '4', icon: Anchor, title: 'Anchor', description: 'Your signed document is permanently anchored on-chain' },
+];
+
+const trustPoints = [
+  {
+    icon: BadgeCheck,
+    title: 'Verifiable Credentials',
+    description:
+      'Your identity is verified through cryptographic credentials issued by trusted authorities and stored in your MyID wallet. No personal data is stored on our servers — only a yes/no verification result and the claims you choose to share.',
+  },
+  {
+    icon: FileCheck,
+    title: 'CMS/PKCS#7 Digital Signatures',
+    description:
+      'Every document receives an industry-standard digital signature embedded directly in the PDF. Open it in any PDF reader to see the signature panel, signer identity, and tamper detection — no special software required.',
+  },
+  {
+    icon: Search,
+    title: 'Document Verification',
+    description:
+      'Anyone with the signed PDF can verify its authenticity. Upload it to our verification page to check the blockchain record, confirm the signer\'s identity, and detect any modifications made after signing.',
+  },
 ];
 
 function SectionLabel({ label, centered }: { label: string; centered?: boolean }) {
@@ -50,6 +71,8 @@ function SectionLabel({ label, centered }: { label: string; centered?: boolean }
 export function LandingContent() {
   const featuresRef = useScrollReveal<HTMLDivElement>();
   const stepsRef = useScrollReveal<HTMLDivElement>();
+  const trustRef = useScrollReveal<HTMLDivElement>();
+  const partnerRef = useScrollReveal<HTMLDivElement>();
   const ctaRef = useScrollReveal<HTMLDivElement>();
 
   return (
@@ -67,7 +90,7 @@ export function LandingContent() {
             >
               <div className="h-px w-9 bg-primary" />
               <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                Blockchain Verified
+                Identity-Verified Digital Signatures
               </span>
             </div>
             <h1
@@ -88,14 +111,16 @@ export function LandingContent() {
                 lineHeight: '1.1',
               }}
             >
-              with Confidence
+              with Verified Identity
             </p>
             <p
               className="mx-auto mt-6 max-w-md text-base font-light leading-relaxed text-[var(--zetrix-text-muted)] lg:mx-0"
               style={{ animation: 'fadeUp 0.8s ease both', animationDelay: '0.8s' }}
             >
-              Tamper-proof digital signatures anchored on the Zetrix blockchain. Upload, sign, and
-              verify — permanently secured on-chain.
+              Prove your identity with your{' '}
+              <strong className="font-medium text-[var(--zetrix-text)]">MyID</strong> digital
+              credentials, sign with industry-standard CMS/PKCS#7 signatures, and anchor the proof
+              permanently on the Zetrix blockchain.
             </p>
             <div
               className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start"
@@ -121,10 +146,9 @@ export function LandingContent() {
             </div>
           </div>
 
-          {/* Right: Sample card (hidden on mobile, shown on lg when grid is 2-col) */}
+          {/* Right: Sample card */}
           <div className="hidden lg:block" style={{ animation: 'fadeUp 1s ease both', animationDelay: '0.6s' }}>
             <div className="relative overflow-hidden rounded-2xl border border-[var(--zetrix-border)] bg-white p-6 shadow-xl shadow-primary/[0.04]">
-              {/* Top edge light line */}
               <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
 
               <div className="mb-4 flex items-center justify-between border-b border-[var(--zetrix-border)] pb-4">
@@ -137,11 +161,12 @@ export function LandingContent() {
               </div>
 
               {[
-                ['Document', 'Contract_v3.pdf'],
-                ['Signer', 'John Tan'],
-                ['Wallet', 'ZTX3Mf...wy8q44'],
+                ['Document', 'Agreement_v2.pdf'],
+                ['Signer', 'Ahmad bin Ali'],
+                ['Identity', 'MyKad (Verified via MyID)'],
+                ['Signature', 'CMS/PKCS#7 (Valid)'],
                 ['TX Hash', '7818869dc4...e486efd195'],
-                ['Timestamp', '2026-03-16 03:23 UTC'],
+                ['Anchored', '2026-04-04 10:15 UTC'],
               ].map(([label, value], i, arr) => (
                 <div
                   key={label}
@@ -168,7 +193,8 @@ export function LandingContent() {
             Why Zetrix Sign?
           </h2>
           <p className="reveal mb-10 max-w-lg text-base font-light text-[var(--zetrix-text-muted)]">
-            Enterprise-grade document signing with blockchain-backed proof of authenticity.
+            Enterprise-grade document signing backed by verifiable credentials, cryptographic
+            signatures, and blockchain proof.
           </p>
 
           <div className="grid gap-6 md:grid-cols-3">
@@ -177,7 +203,6 @@ export function LandingContent() {
                 key={feature.title}
                 className="reveal group relative overflow-hidden rounded-2xl border border-[var(--zetrix-border)] bg-white p-6 transition-all duration-400 hover:-translate-y-1 hover:border-primary/[0.12] hover:shadow-lg hover:shadow-primary/[0.06]"
               >
-                {/* Top edge light line (visible on hover) */}
                 <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/[0.06]">
@@ -201,14 +226,14 @@ export function LandingContent() {
             How It Works
           </h2>
           <p className="reveal mb-10 max-w-lg text-base font-light text-[var(--zetrix-text-muted)]">
-            Four simple steps to a blockchain-verified signature.
+            Four simple steps to a blockchain-verified, identity-backed signature.
           </p>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {steps.map((step) => (
               <div key={step.number} className="reveal group text-center">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border-2 border-primary text-base font-bold text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-white">
-                  {step.number}
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-primary/20 bg-primary/[0.04] transition-all duration-300 group-hover:border-primary group-hover:bg-primary group-hover:shadow-md group-hover:shadow-primary/20">
+                  <step.icon className="h-6 w-6 text-primary transition-colors group-hover:text-white" />
                 </div>
                 <h3 className="mb-1 text-[15px] font-bold">{step.title}</h3>
                 <p className="text-[13px] font-light leading-relaxed text-[var(--zetrix-text-muted)]">
@@ -220,9 +245,128 @@ export function LandingContent() {
         </div>
       </section>
 
+      {/* Trust & Technology Section */}
+      <section className="px-4 py-12 sm:py-20" ref={trustRef}>
+        <div className="container mx-auto max-w-5xl">
+          <SectionLabel label="Technology" />
+          <h2 className="reveal mb-2 text-3xl font-extrabold tracking-tight text-[var(--zetrix-text)] sm:text-4xl">
+            Built on Open Standards
+          </h2>
+          <p className="reveal mb-10 max-w-lg text-base font-light text-[var(--zetrix-text-muted)]">
+            Every layer of Zetrix Sign uses internationally recognized standards — from identity
+            verification to digital signatures to on-chain anchoring.
+          </p>
+
+          <div className="space-y-6">
+            {trustPoints.map((point, i) => (
+              <div
+                key={point.title}
+                className="reveal group relative overflow-hidden rounded-2xl border border-[var(--zetrix-border)] bg-white transition-all duration-300 hover:border-primary/[0.12] hover:shadow-md hover:shadow-primary/[0.04]"
+              >
+                <div className="absolute top-0 left-[10%] right-[10%] h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+
+                <div className="flex items-start gap-4 p-5 sm:gap-5 sm:p-6">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/[0.06] sm:h-12 sm:w-12">
+                    <point.icon className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="text-[15px] font-bold tracking-tight text-[var(--zetrix-text)]">
+                        {point.title}
+                      </h3>
+                      {i === 0 && (
+                        <span className="rounded-full bg-primary/[0.07] px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          OID4VP
+                        </span>
+                      )}
+                      {i === 1 && (
+                        <span className="rounded-full bg-primary/[0.07] px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          RFC 5652
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-sm font-light leading-relaxed text-[var(--zetrix-text-muted)]">
+                      {point.description}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* MyID Partnership Section */}
+      <section className="bg-[var(--zetrix-bg2)] px-4 py-12 sm:py-20" ref={partnerRef}>
+        <div className="container mx-auto max-w-4xl">
+          <div className="reveal text-center">
+            <SectionLabel label="Powered By" centered />
+            <h2 className="mb-3 text-3xl font-extrabold tracking-tight text-[var(--zetrix-text)] sm:text-4xl">
+              Identity Verification with MyID
+            </h2>
+            <p className="mx-auto mb-8 max-w-2xl text-base font-light leading-relaxed text-[var(--zetrix-text-muted)]">
+              Zetrix Sign exclusively uses{' '}
+              <strong className="font-medium text-[var(--zetrix-text)]">MyID</strong> — a digital
+              identity wallet developed in partnership with{' '}
+              <strong className="font-medium text-[var(--zetrix-text)]">MIMOS</strong>, Malaysia's
+              national applied research centre. MyID stores government-issued Verifiable Credentials
+              such as MyKad and Passport, allowing you to prove your identity without sharing
+              copies of your physical documents.
+            </p>
+          </div>
+
+          <div className="reveal grid gap-5 sm:grid-cols-3">
+            {[
+              {
+                title: 'Privacy-Preserving',
+                desc: 'Only the specific claims you approve are shared. Your full IC details stay in your wallet.',
+              },
+              {
+                title: 'Cryptographically Verified',
+                desc: 'Credentials are signed by trusted issuers using BBS+ signatures and verified via zero-knowledge proofs.',
+              },
+              {
+                title: 'Government-Grade',
+                desc: 'Built on W3C Verifiable Credentials and OpenID for Verifiable Presentations (OID4VP) standards.',
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="rounded-xl border border-[var(--zetrix-border)] bg-white p-5 text-center"
+              >
+                <h3 className="mb-1.5 text-[14px] font-bold tracking-tight text-[var(--zetrix-text)]">
+                  {item.title}
+                </h3>
+                <p className="text-[13px] font-light leading-relaxed text-[var(--zetrix-text-muted)]">
+                  {item.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="reveal mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <a
+              href={process.env.NEXT_PUBLIC_MYID_ANDROID_URL || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zetrix-border)] bg-white px-4 py-2 text-xs font-medium text-[var(--zetrix-text)] transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-sm"
+            >
+              Get MyID for Android
+            </a>
+            <a
+              href={process.env.NEXT_PUBLIC_MYID_IOS_URL || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--zetrix-border)] bg-white px-4 py-2 text-xs font-medium text-[var(--zetrix-text)] transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-sm"
+            >
+              Get MyID for iOS
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="relative px-4 py-12 sm:py-20" ref={ctaRef}>
-        {/* Ambient glow */}
         <div
           className="pointer-events-none absolute inset-0"
           style={{
@@ -237,8 +381,8 @@ export function LandingContent() {
             Ready to Sign?
           </h2>
           <p className="reveal mb-8 text-base font-light text-[var(--zetrix-text-muted)]">
-            Start securing your documents on the blockchain in minutes. No account needed — just
-            your Zetrix wallet.
+            Start securing your documents with verified identity and blockchain proof. All you need
+            is your MyID wallet.
           </p>
           <div className="reveal flex flex-col justify-center gap-3 sm:flex-row">
             <Link href="/sign" onClick={() => trackLandingCTA('upload_document')}>
