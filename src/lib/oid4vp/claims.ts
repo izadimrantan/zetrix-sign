@@ -15,5 +15,5 @@ export function getIssuerFromClaims(vc: VerifiedClaims): string {
   if (vc.credentialType === 'mykad') {
     return 'JPN'; // Jabatan Pendaftaran Negara (National Registration Department)
   }
-  return vc.claims.issuingOffice || 'Immigration Department';
+  return 'Immigration Department';
 }

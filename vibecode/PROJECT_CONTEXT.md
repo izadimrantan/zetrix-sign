@@ -8,7 +8,7 @@
 
 **Project Name:** Zetrix Sign
 **Description:** A blockchain-anchored PDF digital signing platform. Users upload a PDF, authenticate via Zetrix Wallet, present a Verifiable Credential, apply a visual signature, hash the signed PDF, sign the hash with their wallet, anchor it on the Zetrix blockchain, and later verify documents against on-chain records.
-**Status:** Production (Testnet) — CMS/PKCS#7 signing upgrade in progress
+**Status:** Production (Testnet) — OID4VP identity verification integrated, CMS/PKCS#7 signing complete
 
 ---
 
@@ -26,6 +26,7 @@
 | Signature Drawing | react-signature-canvas | latest |
 | Wallet (Extension) | window.zetrix API | native |
 | Wallet (Mobile) | zetrix-connect-wallet-sdk | latest |
+| Identity Verification | OID4VP hosted verifier API (zid-oid4vp-sandbox.zetrix.com) | v1 |
 | Contract Queries | zetrix-sdk-nodejs (preferred) / microservice API (fallback) | latest |
 | Contract TX Submission | Wallet SDK sendTransaction (user pays gas) | - |
 | CMS/PKCS#7 Signing | @signpdf/signpdf + pkijs + @peculiar/x509 (server-side) | latest |
@@ -56,6 +57,10 @@ zetrix-sign-official/
     │   │   ├── verify/page.tsx    # Document verification (/verify)
     │   │   └── api/               # Next.js API routes
     │   │       ├── contract/      # Contract query endpoints
+    │   │       ├── oid4vp/        # OID4VP identity verification
+    │   │       │   ├── request/route.ts   # Create verification request → QR
+    │   │       │   ├── callback/route.ts  # Receive HMAC-signed callback
+    │   │       │   └── status/route.ts    # Frontend polls for result
     │   │       └── signing/       # CMS signing API routes
     │   │           ├── cms-sign/route.ts      # Phase 1: prep PDF + hash
     │   │           ├── cms-complete/route.ts  # Phase 2: inject CMS sig
@@ -73,7 +78,10 @@ zetrix-sign-official/
     │   │   ├── pdf.ts             # PDF processing (pdf-lib)
     │   │   ├── hash.ts            # SHA256 hashing utilities
     │   │   ├── blockchain.ts      # Contract interaction layer
-    │   │   ├── vc.ts              # VC handling (dummy now, real later)
+    │   │   ├── vc.ts              # VC type re-exports
+    │   │   ├── oid4vp/
+    │   │   │   ├── verification-store.ts  # In-memory store (callback → poll)
+    │   │   │   └── claims.ts              # Claim extraction helpers
     │   │   ├── analytics.ts       # GA event tracking
     │   │   ├── db.ts              # Prisma client singleton
     │   │   ├── signing-session-store.ts  # CMS session store (5-min TTL)

@@ -8,7 +8,6 @@ describe('vc module re-exports', () => {
       claims: {
         name: 'Ahmad bin Ali',
         icNumber: '901234-10-5678',
-        myDigitalIdExpiry: '2028-12-31',
       },
     };
     expect(mykadClaims.credentialType).toBe('mykad');
@@ -19,25 +18,14 @@ describe('vc module re-exports', () => {
     const claims: MyKadClaims = {
       name: 'Test User',
       icNumber: '000000-00-0000',
-      myDigitalIdExpiry: '2030-01-01',
     };
     expect(claims.icNumber).toBeDefined();
   });
 
   it('supports Passport claims', () => {
     const claims: PassportClaims = {
-      type: 'P',
-      countryCode: 'MYS',
-      passportNumber: 'A12345678',
       name: 'Test User',
-      identityNumber: '000000-00-0000',
-      dateOfBirth: '1990-01-01',
-      gender: 'M',
-      height: '175',
-      dateOfIssue: '2023-01-01',
-      dateOfExpiry: '2028-01-01',
-      issuingOffice: 'Immigration Department',
-      photo: '',
+      passportNumber: 'A12345678',
     };
     expect(claims.passportNumber).toBeDefined();
   });
