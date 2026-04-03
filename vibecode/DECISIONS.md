@@ -9,6 +9,35 @@
 
 <!-- Newest decision at top -->
 
+### 2026-04-04 - OID4VP: Hosted Verifier API (not SDK Direct)
+
+**Context:** Need real identity verification to replace hardcoded dummy credentials. Two approaches available: (1) SDK direct — `zetrix-connect-wallet-sdk` `getVP()` calls MyID wallet directly, (2) OID4VP hosted verifier — backend creates request, QR displayed, callback receives claims.
+
+**Options Considered:**
+| Option | Pros | Cons |
+|--------|------|------|
+| SDK direct (`getVP()`) | Simpler flow, fewer moving parts | MyID wallet returned "VC NOT AVAILABLE" — template ID mismatch or SDK incompatibility |
+| OID4VP hosted verifier (callback) | Proven API, works reliably, supports HMAC security, server controls the flow | Requires public callback URL (ngrok in dev), in-memory store bridges async callback to frontend |
+
+**Decision:** OID4VP hosted verifier API (`zid-oid4vp-sandbox.zetrix.com/api`) with HMAC-signed callbacks
+
+**Implementation:**
+- `POST /api/oid4vp/request` — creates verification request, returns QR data
+- `POST /api/oid4vp/callback` — receives HMAC-signed callback from OID4VP service
+- `GET /api/oid4vp/status` — frontend polls for result
+- In-memory verification store bridges callback → polling (35-min TTL)
+
+**Key Discoveries During Implementation:**
+- Callback payload uses **snake_case** field names (`state_id`, `presentation_id`, `verified_claims`)
+- `verified_claims` contains **`$ref` JSON pointers**, not actual data — real claims live in `credentials[0].credential_subject.mykad` (or `.passport`)
+- HMAC signature is **Base64-encoded** (not hex)
+
+**Rationale:** The SDK `getVP()` approach failed immediately with "VC NOT AVAILABLE" from the MyID wallet. The hosted verifier API is the documented, supported integration path and works end-to-end. The callback-based architecture fits well with Next.js API routes.
+
+**Decided By:** @izadi with AI input
+
+---
+
 ### 2026-04-04 - Pause Browser Extension Wallet & Accordion Layout
 
 **Context:** The current wallet connection step offers two accordion cards: Browser Extension and Mobile Wallet (QR). Product direction is to use the MyID app exclusively for wallet connection — users scan a QR code (desktop) or tap a deeplink (mobile). The Browser Extension option is not needed for now.
