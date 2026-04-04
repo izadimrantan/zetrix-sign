@@ -4,42 +4,40 @@ import { generateSignerCertificate } from '@/lib/cms/x509-cert';
 import { EphemeralCmsSigner } from '@/lib/cms/cms-signer';
 import { buildVcXmp } from '@/lib/cms/xmp-metadata';
 import { preparePdfForSigning } from '@/lib/cms/pdf-cms-sign';
-import type { CmsSignRequest } from '@/types/cms';
+import { storePdf } from '@/lib/pdf-store';
 
 /**
  * POST /api/signing/cms-sign
  *
  * Complete CMS/PKCS#7 signing in a single step:
- * 1. Receives PDF with visual signature embedded
+ * 1. Receives PDF as multipart/form-data (raw binary — no base64)
  * 2. Generates X.509 cert with signer's identity
  * 3. Embeds VC XMP metadata
  * 4. Adds signature placeholder via @signpdf/placeholder-pdf-lib
  * 5. Signs using @signpdf with our custom EphemeralCmsSigner
- * 6. Returns the fully signed PDF + document hash
+ * 6. Stores signed PDF server-side, returns download token + hash
  *
- * Uses @signpdf's proven ByteRange extraction and placeholder injection
- * to ensure compatibility with PDF readers (Adobe, Foxit, etc.).
+ * Uses FormData instead of JSON to avoid base64 encoding overhead
+ * (33% size bloat + iOS memory pressure from atob/btoa).
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as CmsSignRequest;
+    const formData = await request.formData();
 
-    const {
-      pdfBase64,
-      signerName,
-      signerDid,
-      signerAddress,
-      signerPublicKey,
-      credentialId,
-      credentialIssuer,
-      credentialType,
-      identityNumber,
-    } = body;
+    // Extract PDF file from FormData
+    const pdfFile = formData.get('pdf') as File | null;
+    const signerName = formData.get('signerName') as string | null;
+    const signerDid = formData.get('signerDid') as string | null;
+    const signerAddress = formData.get('signerAddress') as string | null;
+    const signerPublicKey = formData.get('signerPublicKey') as string | null;
+    const credentialId = formData.get('credentialId') as string | null;
+    const credentialIssuer = formData.get('credentialIssuer') as string | null;
+    const credentialType = formData.get('credentialType') as string | null;
+    const identityNumber = formData.get('identityNumber') as string | null;
 
-    // Validate required fields (signerPublicKey is optional — mobile wallet
-    // SDK doesn't return it during auth, only during signMessage)
+    // Validate required fields
     const missing = [
-      !pdfBase64 && 'pdfBase64',
+      !pdfFile && 'pdf',
       !signerName && 'signerName',
       !signerAddress && 'signerAddress',
     ].filter(Boolean);
@@ -50,27 +48,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Decode the PDF from base64
-    const pdfBytes = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
+    // 1. Read PDF bytes from the uploaded file (no base64 decoding needed)
+    const pdfBytes = new Uint8Array(await pdfFile!.arrayBuffer());
+    console.log(`[cms-sign] Received PDF via FormData: ${pdfBytes.length} bytes`);
 
     // 2. Generate X.509 certificate wrapping the signer's identity
     const signingTime = new Date();
     const { certDer, signingKey } = await generateSignerCertificate({
-      signerName,
+      signerName: signerName!,
       signerDid: signerDid || `did:zetrix:${signerAddress}`,
-      signerAddress,
-      signerPublicKey,
+      signerAddress: signerAddress!,
+      signerPublicKey: signerPublicKey || undefined,
       credentialId: credentialId || '',
       credentialIssuer: credentialIssuer || '',
-      credentialType,
-      identityNumber,
+      credentialType: credentialType as 'mykad' | 'passport' | undefined,
+      identityNumber: identityNumber || undefined,
     });
 
     // 3. Build VC XMP metadata
     const vcXmp = buildVcXmp({
-      signerName,
+      signerName: signerName!,
       signerDid: signerDid || `did:zetrix:${signerAddress}`,
-      signerAddress,
+      signerAddress: signerAddress!,
       credentialId: credentialId || '',
       credentialIssuer: credentialIssuer || '',
       vcVerifiedAt: new Date().toISOString(),
@@ -79,7 +78,7 @@ export async function POST(request: NextRequest) {
     // 4. Prepare PDF with XMP metadata and signature placeholder
     const pdfWithPlaceholder = await preparePdfForSigning(
       pdfBytes,
-      signerName,
+      signerName!,
       vcXmp,
       signingTime
     );
@@ -100,13 +99,16 @@ export async function POST(request: NextRequest) {
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
 
-    // 7. Return signed PDF + document hash
-    const signedPdfBase64 = Buffer.from(signedPdf).toString('base64');
+    // 7. Store signed PDF server-side (no base64 response — client uses download token)
+    const signedPdfNodeBuffer = Buffer.from(signedPdf);
+    const downloadToken = storePdf(signedPdfNodeBuffer);
+    console.log(`[cms-sign] Stored signed PDF (${signedPdfNodeBuffer.length} bytes), token: ${downloadToken.slice(0, 8)}...`);
 
+    // 8. Return only the document hash + download token (NO base64 PDF)
     return NextResponse.json({
       success: true,
-      signedPdfBase64,
       documentHash,
+      downloadToken,
     });
   } catch (error) {
     console.error('[cms-sign] Error:', error);

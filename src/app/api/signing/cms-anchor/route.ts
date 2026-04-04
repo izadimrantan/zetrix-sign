@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { appendAnchorXmp } from '@/lib/cms/incremental-update';
-import type { CmsAnchorRequest, CmsAnchorResponse } from '@/types/cms';
+import { storePdf, getPdf } from '@/lib/pdf-store';
+import type { CmsAnchorRequest } from '@/types/cms';
 
 /**
  * POST /api/signing/cms-anchor
@@ -9,13 +10,17 @@ import type { CmsAnchorRequest, CmsAnchorResponse } from '@/types/cms';
  * appends anchor metadata (tx hash, block number, verification URL) to the
  * signed PDF via incremental update. This does NOT invalidate the CMS
  * signature because it appends after %%EOF.
+ *
+ * The signed PDF is retrieved from the server-side store using the download
+ * token — the client never sends the PDF bytes back. This eliminates the
+ * ~2.5MB base64 round-trip that caused empty/corrupted downloads on iOS.
  */
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CmsAnchorRequest;
 
     const {
-      signedPdfBase64,
+      downloadToken: sourceToken,
       txHash,
       blockNumber,
       blockTimestamp,
@@ -23,15 +28,24 @@ export async function POST(request: NextRequest) {
       chainId,
     } = body;
 
-    if (!signedPdfBase64 || !txHash || !documentHash) {
+    if (!sourceToken || !txHash || !documentHash) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: signedPdfBase64, txHash, documentHash' },
+        { success: false, error: 'Missing required fields: downloadToken, txHash, documentHash' },
         { status: 400 }
       );
     }
 
-    // 1. Decode the signed PDF
-    const signedPdfBytes = new Uint8Array(Buffer.from(signedPdfBase64, 'base64'));
+    // 1. Retrieve the CMS-signed PDF from the server-side store
+    const signedPdfBuffer = getPdf(sourceToken);
+    if (!signedPdfBuffer) {
+      return NextResponse.json(
+        { success: false, error: 'Signed PDF not found or expired. Please sign the document again.' },
+        { status: 404 }
+      );
+    }
+
+    const signedPdfBytes = new Uint8Array(signedPdfBuffer);
+    console.log(`[cms-anchor] Retrieved signed PDF from store: ${signedPdfBytes.length} bytes`);
 
     // 2. Build explorer URL
     const explorerBaseUrl = process.env.NEXT_PUBLIC_ZETRIX_EXPLORER_URL || 'https://explorer.testnet.zetrix.com';
@@ -47,12 +61,16 @@ export async function POST(request: NextRequest) {
       verificationUrl,
     });
 
-    // 4. Return final PDF
-    const finalPdfBase64 = Buffer.from(finalPdfBytes).toString('base64');
+    // 4. Store final PDF server-side for reliable mobile download
+    const finalPdfBuffer = Buffer.from(finalPdfBytes);
+    const downloadToken = storePdf(finalPdfBuffer);
+    console.log(`[cms-anchor] Stored final PDF (${finalPdfBuffer.length} bytes), token: ${downloadToken.slice(0, 8)}...`);
 
-    const response: CmsAnchorResponse = { finalPdfBase64 };
-
-    return NextResponse.json({ success: true, ...response });
+    // 5. Return only the new download token (NO base64 PDF response)
+    return NextResponse.json({
+      success: true,
+      downloadToken,
+    });
   } catch (error) {
     console.error('[cms-anchor] Error:', error);
     const message = error instanceof Error ? error.message : 'Anchor XMP append failed';

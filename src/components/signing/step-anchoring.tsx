@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Loader2, CheckCircle, XCircle, Smartphone } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,46 @@ import { buildTransactionBlob, submitSignedTransaction } from '@/lib/blockchain'
 import { trackAnchoringStart, trackAnchoringSubStep, trackAnchoringSuccess, trackAnchoringError, trackAnchoringRetry } from '@/lib/analytics';
 import { getIdentifierFromClaims, getIssuerFromClaims } from '@/lib/oid4vp/claims';
 import type { SigningSession } from '@/types/signing';
+
+function getIsMobile(): boolean {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+}
+
+/** Convert SDK QR data (rms&sessionId&type) to a MyID deeplink URL */
+function qrDataToDeeplink(qrContent: string): string {
+  const parts = qrContent.split('&');
+  const rms = parts[0] || '';
+  const sessionId = parts[1] || '';
+  const type = parts[2] || 'H5_bind';
+
+  const bridge = process.env.NEXT_PUBLIC_ZETRIX_BRIDGE || '';
+  const isTestnet = bridge.includes('test-');
+  const scheme = isTestnet ? 'myid-uat' : 'myid';
+  const host = window.location.protocol + '//' + window.location.host;
+
+  const params = new URLSearchParams({
+    linkTo: type,
+    type: type,
+    rms: rms,
+    sessionId: sessionId,
+    host: host,
+    source: 'mobile',
+  });
+
+  return `${scheme}://myid.com/app/flutter?${params.toString()}`;
+}
+
+/** Build a simple MyID deeplink to bring the app to foreground */
+function buildMyIdDeeplink(): string {
+  const bridge = process.env.NEXT_PUBLIC_ZETRIX_BRIDGE || '';
+  const isTestnet = bridge.includes('test-');
+  const scheme = isTestnet ? 'myid-uat' : 'myid';
+  return `${scheme}://myid.com/app/flutter`;
+}
+
 
 interface StepProps {
   session: SigningSession;
@@ -38,6 +78,21 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
   const [mobileQrData, setMobileQrData] = useState('');
   const started = useRef(false);
   const currentSubStepRef = useRef<SubStep>('embedding');
+  const [isMobile] = useState(() => getIsMobile());
+  const deeplinkFiredRef = useRef(false);
+
+  // On mobile: auto-deeplink to MyID when QR data arrives (signing step)
+  useEffect(() => {
+    if (isMobile && mobileQrData && !deeplinkFiredRef.current) {
+      deeplinkFiredRef.current = true;
+      const deeplink = qrDataToDeeplink(mobileQrData);
+      console.log('[Anchoring] Mobile deeplink:', deeplink);
+      window.location.href = deeplink;
+    }
+    if (!mobileQrData) {
+      deeplinkFiredRef.current = false;
+    }
+  }, [isMobile, mobileQrData]);
 
   useEffect(() => {
     if (started.current) return;
@@ -67,9 +122,8 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       currentSubStepRef.current = 'cms-signing';
       setSubStep('cms-signing');
       trackAnchoringSubStep('cms-signing');
-      console.log('[Anchoring] Sending PDF to server for CMS signing...');
+      console.log('[Anchoring] Sending PDF to server for CMS signing via FormData...');
 
-      const pdfBase64 = Buffer.from(visualPdf).toString('base64');
       // Extract identity details from verified claims
       const credentialIssuer = session.verifiedClaims
         ? getIssuerFromClaims(session.verifiedClaims)
@@ -78,20 +132,23 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         ? getIdentifierFromClaims(session.verifiedClaims)
         : '';
 
+      // Build FormData with raw PDF binary (no base64 encoding — saves 33% size
+      // and avoids iOS memory pressure from atob/Buffer polyfill)
+      const formData = new FormData();
+      formData.append('pdf', new Blob([visualPdf.buffer as ArrayBuffer], { type: 'application/pdf' }), session.pdfFile!.name);
+      formData.append('signerName', session.signerName);
+      formData.append('signerDid', session.signerDID || `did:zetrix:${session.walletAddress}`);
+      formData.append('signerAddress', session.walletAddress);
+      if (session.publicKey) formData.append('signerPublicKey', session.publicKey);
+      formData.append('credentialId', session.credentialID);
+      formData.append('credentialIssuer', credentialIssuer);
+      if (session.credentialType) formData.append('credentialType', session.credentialType);
+      if (identityNumber) formData.append('identityNumber', identityNumber);
+
       const cmsSignRes = await fetch('/api/signing/cms-sign', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pdfBase64,
-          signerName: session.signerName,
-          signerDid: session.signerDID || `did:zetrix:${session.walletAddress}`,
-          signerAddress: session.walletAddress,
-          signerPublicKey: session.publicKey,
-          credentialId: session.credentialID,
-          credentialIssuer,
-          credentialType: session.credentialType || undefined,
-          identityNumber: identityNumber || undefined,
-        }),
+        // No Content-Type header — browser auto-sets multipart/form-data with boundary
+        body: formData,
       });
 
       if (!cmsSignRes.ok) {
@@ -99,11 +156,13 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         throw new Error((errBody as { error?: string }).error || `CMS signing failed (${cmsSignRes.status})`);
       }
 
-      const { signedPdfBase64, documentHash } = await cmsSignRes.json();
+      // Server returns only documentHash + downloadToken (no base64 PDF payload)
+      const { documentHash, downloadToken: cmsDownloadToken } = await cmsSignRes.json();
       console.log('[Anchoring] CMS signature applied. Document hash:', documentHash?.slice(0, 20) + '...');
+      console.log('[Anchoring] CMS download token:', cmsDownloadToken?.slice(0, 8) + '...');
 
-      // Store the CMS-signed PDF bytes for later download
-      const cmsSignedPdfBytes = Uint8Array.from(atob(signedPdfBase64), (c) => c.charCodeAt(0));
+      // Track the latest download token (will be updated if anchor XMP succeeds)
+      let downloadToken = cmsDownloadToken || '';
 
       // ── Step 4: Wallet signs the document hash ──
       // This signature is stored on-chain and verified by the smart contract's
@@ -121,13 +180,28 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         walletSignature = signResult.signData;
         signerPublicKey = signResult.publicKey || session.publicKey;
       } else {
-        console.log('[Anchoring] Mobile: reconnecting for sign...');
-        const signResult = await reconnectAndSignMobile(documentHash, (qrContent) => {
-          setMobileQrData(qrContent);
-        });
-        setMobileQrData('');
-        walletSignature = signResult.signData;
-        signerPublicKey = signResult.publicKey || session.publicKey;
+        // Try existing SDK session first — only reconnect if it fails
+        try {
+          console.log('[Anchoring] Mobile: signing with existing session...');
+          // Start sign request (sends over WebSocket immediately)
+          const signPromise = signMessageMobile(documentHash);
+          // Redirect to MyID so user can see and approve the signing popup
+          if (isMobile) {
+            console.log('[Anchoring] Mobile: redirecting to MyID for signing approval...');
+            window.location.href = buildMyIdDeeplink();
+          }
+          const signResult = await signPromise;
+          walletSignature = signResult.signData;
+          signerPublicKey = signResult.publicKey || session.publicKey;
+        } catch (existingSessionErr) {
+          console.log('[Anchoring] Existing session failed, reconnecting...', existingSessionErr);
+          const signResult = await reconnectAndSignMobile(documentHash, (qrContent) => {
+            setMobileQrData(qrContent);
+          });
+          setMobileQrData('');
+          walletSignature = signResult.signData;
+          signerPublicKey = signResult.publicKey || session.publicKey;
+        }
       }
 
       // ── Step 5: Submit anchorDocument transaction ──
@@ -152,7 +226,13 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
 
       if (session.connectionMethod === 'mobile') {
         console.log('[Anchoring] Mobile: signing blob...');
-        const blobSign = await signMessageMobile(blob);
+        // Start sign request then redirect to MyID for approval
+        const blobSignPromise = signMessageMobile(blob);
+        if (isMobile) {
+          console.log('[Anchoring] Mobile: redirecting to MyID for blob signing approval...');
+          window.location.href = buildMyIdDeeplink();
+        }
+        const blobSign = await blobSignPromise;
         txHash = await submitSignedTransaction(blob, blobSign.signData, blobSign.publicKey || signerPublicKey, blobHash, session.walletAddress);
       } else {
         console.log('[Anchoring] Waiting 3s for extension to reset...');
@@ -168,11 +248,13 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       trackAnchoringSubStep('anchor-xmp');
       console.log('[Anchoring] Appending anchor XMP to signed PDF...');
 
+      // Send only the download token — server retrieves PDF from its own store
+      // (eliminates the ~2.5MB base64 round-trip that caused iOS corruption)
       const anchorRes = await fetch('/api/signing/cms-anchor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          signedPdfBase64,
+          downloadToken,
           txHash,
           blockNumber: 0, // Will be populated when we have block info
           blockTimestamp: new Date().toISOString(),
@@ -182,12 +264,16 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
       });
 
       if (!anchorRes.ok) {
-        // Non-critical: if anchor XMP fails, we still have the signed PDF
+        // Non-critical: if anchor XMP fails, we still have the CMS-signed PDF via download token
         console.warn('[Anchoring] Anchor XMP append failed, using PDF without anchor metadata');
-        signedPdfBytesRef.current = cmsSignedPdfBytes;
+        // downloadToken stays as cmsDownloadToken
       } else {
-        const { finalPdfBase64 } = await anchorRes.json();
-        signedPdfBytesRef.current = Uint8Array.from(atob(finalPdfBase64), (c) => c.charCodeAt(0));
+        const { downloadToken: anchorDownloadToken } = await anchorRes.json();
+        // Use the anchor token (points to final PDF with XMP metadata)
+        if (anchorDownloadToken) {
+          downloadToken = anchorDownloadToken;
+          console.log('[Anchoring] Anchor download token:', downloadToken.slice(0, 8) + '...');
+        }
       }
 
       // ── Step 7: Save session to DB ──
@@ -217,6 +303,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         digitalSignature: walletSignature,
         txHash,
         anchorVersion: '2.0',
+        downloadToken,
         timestamp: new Date().toISOString(),
       });
 
@@ -235,15 +322,25 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
     }
   }
 
-  const steps: { key: SubStep; label: string }[] = [
-    { key: 'embedding', label: 'Embedding visual signature...' },
-    { key: 'cms-signing', label: 'Applying CMS/PKCS#7 digital signature...' },
-    { key: 'signing', label: 'Signing document hash with wallet...' },
-    { key: 'anchoring', label: 'Submitting to Zetrix blockchain...' },
-    { key: 'anchor-xmp', label: 'Embedding blockchain proof in PDF...' },
-    { key: 'saving', label: 'Saving session record...' },
-    { key: 'done', label: 'Anchoring complete!' },
-  ];
+  const steps: { key: SubStep; label: ReactNode }[] = isMobile
+    ? [
+        { key: 'embedding', label: 'Embedding visual signature...' },
+        { key: 'cms-signing', label: 'Applying digital signature...' },
+        { key: 'signing', label: <><b>Sign document hash in your MyID App</b></> },
+        { key: 'anchoring', label: <><b>Submit to Zetrix blockchain using your MyID App</b></> },
+        { key: 'anchor-xmp', label: 'Embedding blockchain proof in PDF...' },
+        { key: 'saving', label: 'Saving session record...' },
+        { key: 'done', label: 'Anchoring complete!' },
+      ]
+    : [
+        { key: 'embedding', label: 'Embedding visual signature...' },
+        { key: 'cms-signing', label: 'Applying CMS/PKCS#7 digital signature...' },
+        { key: 'signing', label: 'Signing document hash with wallet...' },
+        { key: 'anchoring', label: 'Submitting to Zetrix blockchain...' },
+        { key: 'anchor-xmp', label: 'Embedding blockchain proof in PDF...' },
+        { key: 'saving', label: 'Saving session record...' },
+        { key: 'done', label: 'Anchoring complete!' },
+      ];
 
   const isError = subStep === 'error';
   const activeStep = isError ? failedAt : subStep;
@@ -274,12 +371,12 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
           ))}
         </div>
 
-        {/* Mobile QR for signing during anchoring */}
-        {mobileQrData && subStep === 'signing' && (
+        {/* Signing approval: QR on desktop, deeplink on mobile */}
+        {mobileQrData && subStep === 'signing' && !isMobile && (
           <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/30 p-4">
             <div className="flex items-center gap-2">
               <Smartphone className="h-5 w-5 text-primary" />
-              <p className="text-sm font-medium">Approve on your Zetrix App</p>
+              <p className="text-sm font-medium">Approve on your MyID App</p>
             </div>
             <p className="text-xs text-muted-foreground text-center max-w-[280px]">
               Scan this QR code to reconnect your wallet, then approve the signing request on your phone.
@@ -287,6 +384,17 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
             <div className="rounded-xl border bg-white p-3">
               <QRCodeSVG value={mobileQrData} size={180} level="M" />
             </div>
+          </div>
+        )}
+        {mobileQrData && subStep === 'signing' && isMobile && (
+          <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/30 p-4">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <p className="text-sm font-medium">Approve in MyID App</p>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Opening MyID... Approve the signing request on your phone.
+            </p>
           </div>
         )}
 

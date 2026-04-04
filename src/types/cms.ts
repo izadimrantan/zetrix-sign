@@ -14,8 +14,9 @@ export interface CmsSigningSession {
 
 // --- API Request/Response Types ---
 
+/** Fields sent alongside the PDF file in a multipart/form-data upload to /api/signing/cms-sign */
 export interface CmsSignRequest {
-  pdfBase64: string;
+  // PDF is sent as a File in the FormData body (not base64)
   signerName: string;
   signerDid: string;
   signerAddress: string;
@@ -39,10 +40,11 @@ export interface CmsCompleteRequest {
 export interface CmsCompleteResponse {
   signedPdfBase64: string;
   documentHash: string;
+  downloadToken: string;
 }
 
 export interface CmsAnchorRequest {
-  signedPdfBase64: string;
+  downloadToken: string; // Token to retrieve CMS-signed PDF from server-side store
   txHash: string;
   blockNumber: number;
   blockTimestamp: string; // ISO 8601
@@ -51,7 +53,7 @@ export interface CmsAnchorRequest {
 }
 
 export interface CmsAnchorResponse {
-  finalPdfBase64: string;
+  downloadToken: string; // Token for the final PDF with anchor XMP metadata
 }
 
 // --- Certificate Generation Types ---

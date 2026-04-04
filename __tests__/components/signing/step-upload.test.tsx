@@ -18,7 +18,7 @@ const createMockProps = () => ({
     signatureType: '' as const, signatureImage: '',
     signaturePosition: null,
     documentHash: '', digitalSignature: '', txHash: '',
-    anchorVersion: '2.0', cmsSessionId: '',
+    anchorVersion: '2.0', cmsSessionId: '', downloadToken: '',
     timestamp: '',
   },
   updateSession: vi.fn(),

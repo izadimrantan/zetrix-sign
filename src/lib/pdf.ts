@@ -64,5 +64,7 @@ export async function embedSignatureOnPdf(
     size: fontSize,
   });
 
-  return doc.save();
+  // Disable Object Streams for maximum compatibility with iOS viewers
+  // and older PDF readers (produces slightly larger but more portable PDFs)
+  return doc.save({ useObjectStreams: false });
 }
