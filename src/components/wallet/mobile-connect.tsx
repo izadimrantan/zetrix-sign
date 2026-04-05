@@ -76,6 +76,13 @@ export function MobileConnect({ onConnected, inline, isMobile }: Props) {
     if (connectingRef.current) return;
     connectingRef.current = true;
 
+    // Disconnect any stale SDK session before creating a fresh one
+    // (the old WebSocket may be dead after a timeout)
+    await disconnectMobile();
+
+    // Reset the deeplink guard so the redirect fires on retry
+    deeplinkFiredRef.current = false;
+
     setStatus('connecting');
     setQrData('');
     setError('');

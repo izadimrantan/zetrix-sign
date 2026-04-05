@@ -36,10 +36,19 @@ export async function GET(request: NextRequest) {
   // Use the filename from the query string, or fall back to a default
   const rawFilename = request.nextUrl.searchParams.get('filename') || 'signed-document.pdf';
   // Sanitize: remove path separators and null bytes
-  const filename = rawFilename.replace(/[/\\:\0]/g, '_');
+  const sanitized = rawFilename.replace(/[/\\:\0]/g, '_');
 
-  // RFC 5987 encoding for non-ASCII filenames
-  const encodedFilename = encodeURIComponent(filename)
+  // ASCII-safe fallback for the basic `filename="..."` parameter.
+  // HTTP headers are Latin-1 (ISO-8859-1) only — characters above code point
+  // 255 (e.g. emojis like ⭐) crash the Response constructor with
+  // "Cannot convert argument to a ByteString".
+  // Strip all non-ASCII characters for the fallback filename.
+  const asciiFilename = sanitized.replace(/[^\x20-\x7E]/g, '').trim() || 'signed-document.pdf';
+
+  // RFC 5987 encoding for the full Unicode filename (filename* parameter).
+  // Modern browsers prefer filename* and will display the original name
+  // including emojis, CJK characters, etc.
+  const encodedFilename = encodeURIComponent(sanitized)
     .replace(/['()]/g, escape)
     .replace(/\*/g, '%2A');
 
@@ -48,7 +57,7 @@ export async function GET(request: NextRequest) {
     headers: {
       'Content-Type': 'application/octet-stream',
       'Content-Length': pdfBytes.length.toString(),
-      'Content-Disposition': `attachment; filename="${filename}"; filename*=UTF-8''${encodedFilename}`,
+      'Content-Disposition': `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodedFilename}`,
       'Cache-Control': 'no-store',
     },
   });

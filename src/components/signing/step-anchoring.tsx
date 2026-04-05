@@ -65,6 +65,7 @@ type SubStep =
   | 'embedding'
   | 'cms-signing'
   | 'signing'
+  | 'mobile-continue' // Mobile only: pause between signing and blockchain submit
   | 'anchoring'
   | 'anchor-xmp'
   | 'saving'
@@ -80,6 +81,8 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
   const currentSubStepRef = useRef<SubStep>('embedding');
   const [isMobile] = useState(() => getIsMobile());
   const deeplinkFiredRef = useRef(false);
+  // Resolver for the mobile "Continue" gate between signing and blockchain submission
+  const mobileContinueResolveRef = useRef<(() => void) | null>(null);
 
   // On mobile: auto-deeplink to MyID when QR data arrives (signing step)
   useEffect(() => {
@@ -202,6 +205,17 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
           walletSignature = signResult.signData;
           signerPublicKey = signResult.publicKey || session.publicKey;
         }
+      }
+
+      // ── Mobile gate: wait for user to return to browser before next MyID redirect ──
+      if (isMobile && session.connectionMethod === 'mobile') {
+        currentSubStepRef.current = 'mobile-continue';
+        setSubStep('mobile-continue');
+        console.log('[Anchoring] Mobile: waiting for user to tap Continue before blockchain submission...');
+        await new Promise<void>((resolve) => {
+          mobileContinueResolveRef.current = resolve;
+        });
+        mobileContinueResolveRef.current = null;
       }
 
       // ── Step 5: Submit anchorDocument transaction ──
@@ -327,6 +341,7 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
         { key: 'embedding', label: 'Embedding visual signature...' },
         { key: 'cms-signing', label: 'Applying digital signature...' },
         { key: 'signing', label: <><b>Sign document hash in your MyID App</b></> },
+        { key: 'mobile-continue', label: 'Ready to submit to blockchain' },
         { key: 'anchoring', label: <><b>Submit to Zetrix blockchain using your MyID App</b></> },
         { key: 'anchor-xmp', label: 'Embedding blockchain proof in PDF...' },
         { key: 'saving', label: 'Saving session record...' },
@@ -395,6 +410,29 @@ export function StepAnchoring({ session, updateSession, nextStep, signedPdfBytes
             <p className="text-xs text-muted-foreground text-center">
               Opening MyID... Approve the signing request on your phone.
             </p>
+          </div>
+        )}
+
+        {/* Mobile: Continue button between signing and blockchain submission */}
+        {subStep === 'mobile-continue' && isMobile && (
+          <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/30 p-4">
+            <CheckCircle className="h-8 w-8 text-green-500" />
+            <p className="text-sm font-medium text-center">
+              Document hash signed successfully!
+            </p>
+            <p className="text-xs text-muted-foreground text-center max-w-[280px]">
+              You will be redirected to MyID again to approve the blockchain transaction.
+            </p>
+            <Button
+              className="min-h-[44px] w-full max-w-[280px]"
+              onClick={() => {
+                if (mobileContinueResolveRef.current) {
+                  mobileContinueResolveRef.current();
+                }
+              }}
+            >
+              Continue to Blockchain Submission
+            </Button>
           </div>
         )}
 
