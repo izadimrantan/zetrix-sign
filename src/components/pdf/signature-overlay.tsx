@@ -42,7 +42,21 @@ export function SignatureOverlay({
   }, []);
 
   // Default position: top-right corner
-  const pos = position || { x: 0.65, y: 0.03, page: currentPage, width: 0.3, height: 0.08 };
+  // Auto-signature image is 400x100 (4:1). Drawn signature is 600x160 (3.75:1).
+  // Compute box height from width to maintain ~4:1 aspect ratio regardless of page size.
+  const SIG_ASPECT = 4; // width:height ratio
+  const defaultW = 0.4;
+  // Convert aspect: height (as % of page) = (width_px / SIG_ASPECT) / containerHeight
+  const defaultH = (defaultW * containerWidth) / (SIG_ASPECT * containerHeight);
+
+  const pos = position
+    ? {
+        ...position,
+        // Enforce aspect ratio on stored positions too (fixes tall boxes from old sessions)
+        height: (position.width * containerWidth) / (SIG_ASPECT * containerHeight),
+      }
+    : { x: 0.55, y: 0.03, page: currentPage, width: defaultW, height: defaultH };
+
   const absX = pos.x * containerWidth;
   const absY = pos.y * containerHeight;
   const absW = pos.width * containerWidth;

@@ -54,15 +54,24 @@ export async function embedSignatureOnPdf(
     height: sigHeight,
   });
 
-  // Add text annotation below signature
-  const fontSize = 6;
+  // Add text annotation below signature (one line per field so nothing is cut off)
+  const fontSize = 5;
+  const lineHeight = fontSize + 2;
   const timestamp = new Date().toISOString();
-  const text = `Signed by: ${signerName} | Wallet: ${walletAddress} | ${timestamp}`;
-  page.drawText(text, {
-    x: sigX,
-    y: sigY - fontSize - 2,
-    size: fontSize,
+  const lines = [
+    `Signed by: ${signerName}`,
+    `Wallet: ${walletAddress}`,
+    `Date: ${timestamp}`,
+  ];
+  lines.forEach((line, i) => {
+    page.drawText(line, {
+      x: sigX,
+      y: sigY - (i + 1) * lineHeight,
+      size: fontSize,
+    });
   });
 
-  return doc.save();
+  // Disable Object Streams for maximum compatibility with iOS viewers
+  // and older PDF readers (produces slightly larger but more portable PDFs)
+  return doc.save({ useObjectStreams: false });
 }

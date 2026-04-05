@@ -19,23 +19,34 @@ interface StepProps {
 }
 
 export function StepComplete({ session, resetSession, signedPdfBytesRef }: StepProps) {
-  const handleDownload = useCallback(() => {
+  const filename = session.pdfFile?.name?.replace('.pdf', '-signed.pdf') || 'signed-document.pdf';
+
+  // Primary: server-side download URL (works on all platforms including iOS)
+  // The server responds with Content-Type: application/octet-stream and
+  // Content-Disposition: attachment, which forces a native file download
+  // and prevents iOS QuickLook from crashing on complex PDFs.
+  const downloadUrl = session.downloadToken
+    ? `/api/signing/download?token=${encodeURIComponent(session.downloadToken)}&filename=${encodeURIComponent(filename)}`
+    : null;
+
+  // Fallback: client-side blob download (if server token is missing/expired)
+  const handleFallbackDownload = useCallback(async () => {
     const bytes = signedPdfBytesRef.current;
     if (!bytes) {
       alert('Signed PDF is no longer in memory. Please sign the document again.');
       return;
     }
-    // Create a blob from the exact bytes that were hashed and anchored on-chain
-    const blob = new Blob([new Uint8Array(bytes) as BlobPart], { type: 'application/pdf' });
+
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = session.pdfFile?.name?.replace('.pdf', '-signed.pdf') || 'signed-document.pdf';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [signedPdfBytesRef, session.pdfFile?.name]);
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }, [signedPdfBytesRef, filename]);
 
   return (
     <div style={{ animation: 'fadeUp 0.4s ease both' }}>
@@ -79,9 +90,22 @@ export function StepComplete({ session, resetSession, signedPdfBytesRef }: StepP
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button className="min-h-[44px] flex-1" onClick={() => { trackSignedPdfDownload(); handleDownload(); }}>
-            <Download className="mr-2 h-4 w-4" /> Download Signed PDF
-          </Button>
+          {downloadUrl ? (
+            <a
+              href={downloadUrl}
+              download={filename}
+              className="flex-1"
+              onClick={() => trackSignedPdfDownload()}
+            >
+              <Button className="min-h-[44px] w-full">
+                <Download className="mr-2 h-4 w-4" /> Download Signed PDF
+              </Button>
+            </a>
+          ) : (
+            <Button className="min-h-[44px] flex-1" onClick={() => { trackSignedPdfDownload(); handleFallbackDownload(); }}>
+              <Download className="mr-2 h-4 w-4" /> Download Signed PDF
+            </Button>
+          )}
           <a
             href={`${process.env.NEXT_PUBLIC_ZETRIX_EXPLORER_URL}/tx/${session.txHash}`}
             target="_blank"

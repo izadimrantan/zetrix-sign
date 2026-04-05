@@ -128,7 +128,12 @@ const SDK_TESTNET = BRIDGE.includes('test-') ? true : false;
  * The SDK's WebSocket connection is tied to a single session,
  * and reusing a stale instance causes silent failures.
  */
-async function createSDK(qrDataCallback?: (qrContent: string, closeCb?: (data?: unknown) => void) => void, appType: string = 'zetrix'): Promise<any> {
+async function createSDK(opts?: {
+  qrDataCallback?: (qrContent: string, closeCb?: (data?: unknown) => void) => void;
+  appType?: string;
+  /** Set false on mobile so the SDK uses deeplink (linkTo) instead of QR */
+  qrcode?: boolean;
+}): Promise<any> {
   if (typeof window === 'undefined') {
     throw new Error('SDK can only be used in the browser');
   }
@@ -142,15 +147,19 @@ async function createSDK(qrDataCallback?: (qrContent: string, closeCb?: (data?: 
   const module = await import('zetrix-connect-wallet-sdk');
   const ZetrixWalletConnect = module.default || module;
 
+  const appType = opts?.appType ?? 'myid';
+  const useQrcode = opts?.qrcode ?? true;
+  const qrDataCallback = opts?.qrDataCallback;
+
   const options: Record<string, unknown> = {
     bridge: BRIDGE,
     callMode: 'web',
-    qrcode: true,
+    qrcode: useQrcode,
     appType,
     testnet: SDK_TESTNET,
   };
 
-  if (qrDataCallback) {
+  if (qrDataCallback && useQrcode) {
     options.customQrUi = true;
     options.qrDataCallback = qrDataCallback;
   }
@@ -171,6 +180,7 @@ async function createSDK(qrDataCallback?: (qrContent: string, closeCb?: (data?: 
  * can render it with a custom QR component (QRCodeSVG).
  */
 export async function connectMobile(
+  isMobile: boolean = false,
   qrDataCallback?: (qrContent: string) => void
 ): Promise<WalletConnectResult> {
   // Wrap the user's callback to also accept the SDK's close callback
@@ -187,7 +197,11 @@ export async function connectMobile(
       }
     : undefined;
 
-  const sdk = await createSDK(wrappedCallback);
+  // Always use qrcode=true so the SDK sends H5_put to the bridge
+  // and we get the rms token. On mobile we convert QR data → deeplink.
+  const sdk = await createSDK({
+    qrDataCallback: wrappedCallback,
+  });
 
   // Step 1: sdk.connect() — establishes WebSocket and generates QR.
   // The QR is delivered via qrDataCallback. The promise resolves
@@ -282,7 +296,7 @@ export async function reconnectAndSignMobile(
       }
     : undefined;
 
-  const sdk = await createSDK(wrappedCallback);
+  const sdk = await createSDK({ qrDataCallback: wrappedCallback });
 
   // Step 1: Establish WebSocket
   console.log('[wallet-mobile] Reconnecting...');
@@ -404,7 +418,7 @@ export async function getVPMobile(
     : undefined;
 
   // Create SDK with appType 'myid' for MyID wallet
-  const sdk = await createSDK(wrappedCallback, 'myid');
+  const sdk = await createSDK({ qrDataCallback: wrappedCallback, appType: 'myid' });
 
   // Step 1: Establish WebSocket
   console.log('[wallet-mobile] getVP: connecting...');

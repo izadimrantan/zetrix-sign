@@ -42,7 +42,8 @@ export async function preparePdfForSigning(
   });
 
   // 4. Save and return — @signpdf handles ByteRange extraction and injection
-  const savedBytes = await pdfDoc.save();
+  // Disable Object Streams for maximum iOS / older PDF reader compatibility
+  const savedBytes = await pdfDoc.save({ useObjectStreams: false });
   return new Uint8Array(savedBytes);
 }
 

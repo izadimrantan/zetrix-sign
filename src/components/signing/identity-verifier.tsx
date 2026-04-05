@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, CheckCircle, XCircle, ShieldCheck, CreditCard, BookOpen, ChevronDown, ExternalLink } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, ShieldCheck, CreditCard, BookOpen, ChevronDown } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -124,8 +124,15 @@ export function IdentityVerifier({ onVerified, initialClaims, initialPresentatio
 
       setQrData(data.qrCodeData);
       setDeepLinkUrl(data.deepLinkUrl || '');
-      setPhase('scanning');
       startPolling(data.stateId);
+
+      // Mobile: immediately redirect to MyID deeplink, skip the QR/button phase
+      if (isMobile && data.deepLinkUrl) {
+        console.log('[IdentityVerifier] Mobile deeplink:', data.deepLinkUrl);
+        window.location.href = data.deepLinkUrl;
+      }
+
+      setPhase('scanning');
     } catch (err) {
       const message =
         err instanceof Error
@@ -276,27 +283,15 @@ export function IdentityVerifier({ onVerified, initialClaims, initialPresentatio
       {phase === 'scanning' && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 space-y-4">
           {isMobile ? (
-            /* ---- Mobile: deeplink button, no QR ---- */
+            /* ---- Mobile: already deeplinked, just show waiting ---- */
             <div className="flex flex-col items-center gap-4 rounded-lg border bg-muted/30 p-6">
-              <p className="text-sm font-medium">Verify your identity with MyID</p>
-              <p className="text-xs text-muted-foreground text-center max-w-[280px]">
-                Tap the button below to open MyID and approve the credential disclosure.
-              </p>
-              {deepLinkUrl && (
-                <a
-                  href={deepLinkUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open in MyID App
-                </a>
-              )}
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Waiting for MyID approval...
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <p className="text-sm font-medium">Waiting for MyID approval...</p>
               </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Approve the credential disclosure in MyID to continue.
+              </p>
             </div>
           ) : (
             /* ---- Desktop: QR code ---- */
